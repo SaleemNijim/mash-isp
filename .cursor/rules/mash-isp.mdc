@@ -1,0 +1,66 @@
+---
+description: قواعد مشروع MASH ISP الملزمة — تُطبق على كل برومبت وكل ملف
+alwaysApply: true
+---
+
+# قواعد مشروع MASH ISP — ملزمة دائماً
+
+> انسخ هذا الملف إلى `.cursor/rules/mash-isp.mdc` داخل جذر المشروع بعد تنفيذ P0.
+> المرجع الوحيد للمواصفات: `docs/BLUEPRINT.md` — أي إشارة §X.Y تعني قسماً فيه.
+
+## 0) قاعدة الانضباط — الأهم على الإطلاق
+
+- **نفِّذ فقط ما يطلبه البرومبت الحالي. لا أكثر ولا أقل.**
+- ممنوع إنشاء أي ملف غير مذكور في قائمة "الملفات المسموح بها" في البرومبت.
+- ممنوع تثبيت أي مكتبة غير مذكورة في البرومبت أو في P0.
+- ممنوع إعادة هيكلة (refactor) أو "تحسين" كود موجود لم يطلبه البرومبت.
+- ممنوع إضافة ميزات أو صفحات أو جداول "استباقية" غير مطلوبة.
+- إذا احتجت شيئاً خارج نطاق البرومبت لإتمام المهمة: **توقف واسأل** — لا تفترض ولا ترتجل.
+- إذا تعارض البرومبت مع `docs/BLUEPRINT.md`: التزم بالبرومبت واذكر التعارض في ملخصك النهائي.
+- عند وجود SQL أو كود مرجعي في `docs/BLUEPRINT.md` موسوم "يُطبَّق حرفياً": انسخه كما هو، لا تعد كتابته بأسلوبك.
+
+## 1) Stack ثابت — لا بدائل
+
+- Next.js 14 App Router + TypeScript + Tailwind + shadcn/ui + Supabase + Dexie.js (v3) + Zustand + TanStack Query/Virtual + Zod + sonner + recharts.
+- Excel: **exceljs فقط** — ممنوع منعاً باتاً استخدام `xlsx` / SheetJS (لا يقرأ ألوان الخلايا).
+- لا تغيّر إصدارات أو تستبدل مكتبة بأخرى "أفضل" برأيك.
+
+## 2) التسعير الديناميكي — Zero Tolerance
+
+- **ممنوع أي سعر أو نسبة خصم أو مدة تجربة hard-coded في الكود** (لا `20`، لا `180`، لا `"25%"`, لا `30` كأيام trial). كل القيم تُجلب من جدول `subscription_plans`.
+- `discount_percent` تُحسب في DB كـ Generated Column — **ممنوع حسابها في TypeScript**.
+- `is_coming_soon = true` → اعرض `EnterpriseComingSoonCard` بزر معطّل — لا منطق تفعيل.
+- تعديل الأسعار من `app/super-admin/plans/page.tsx` فقط.
+
+## 3) Multi-Tenant والأمان
+
+- كل جدول بيانات يحمل `tenant_id` + `ENABLE` و `FORCE ROW LEVEL SECURITY` (§4.1).
+- `internet_credentials`: `UNIQUE(tenant_id, username)` — **ليس** `UNIQUE(username)`.
+- `has_permission` يجب أن تفحص `users.is_active = true` (§5.1).
+- Triggers الحذف تستخدم `OLD.tenant_id` وليس `NEW.tenant_id`.
+- Realtime channels مقيدة بالـ tenant: `mac-changes-{tenantId}` + filter `tenant_id=eq.{tenantId}` (§4.3).
+- `payments`: CHECK — أي method ليست cash/debt تستلزم `bank_account_id IS NOT NULL`.
+- `pending_tasks.status` CHECK يشمل: `pending, reminded, converted_to_debt, completed`.
+- `debts.related_task_id` UNIQUE + كل Cron يستخدم `NOT EXISTS` لمنع التكرار (§5.3).
+
+## 4) الحذف والبيانات
+
+- **Soft Delete فقط** — ممنوع `DELETE` فعلي على جداول البيانات. `is_deleted = true` + تسجيل في `audit_logs` مع القيم القديمة.
+- كل عملية حذف في UI تمر عبر `DeleteConfirmModal` (تأكيد بكتابة "حذف" + try/catch + toast.error).
+- العمليات المركبة (تجديد اشتراك، استلام دفعة بطاقات) عبر RPC ذرية — لا عمليات متعددة من الـ client.
+
+## 5) الواجهة
+
+- اللغة عربية + RTL كامل: `<html lang="ar" dir="rtl">` + خط Noto Sans Arabic.
+- القوائم الطويلة: `useInfiniteVirtualData` (§6.5) — ممنوع Pagination تقليدية وممنوع VirtualScroll منفصل.
+- البحث مع Debounce 300ms.
+- Offline: تجديد الاشتراك + بيع البطاقات فقط (§6.1) — لا تجعل أي ميزة أخرى تعمل offline.
+
+## 6) صيغة الإنهاء الإلزامية لكل مهمة
+
+في نهاية كل برومبت، قدّم:
+1. قائمة الملفات التي أُنشئت/عُدِّلت (مسارات كاملة).
+2. تأكيد اجتياز معيار القبول المذكور في البرومبت (أو سبب عدم اجتيازه).
+3. أي شيء خارج النطاق اكتشفت أنه ضروري — **كسؤال، وليس كتنفيذ**.
+
+ثم **توقف**. لا تبدأ بالمهمة التالية من تلقاء نفسك.
