@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
-import { Noto_Sans_Arabic, Geist } from "next/font/google";
+import { Cairo } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
-
-const notoSansArabic = Noto_Sans_Arabic({
-  variable: "--font-noto-arabic",
-  subsets: ["arabic"],
-  weight: ["400", "500", "600", "700"],
+const cairo = Cairo({
+  variable: "--font-sans",
+  subsets: ["arabic", "latin"],
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
-  title: "MASH ISP",
-  description: "نظام إدارة شركات الإنترنت",
+  title: {
+    default: "MASH ISP — نظام إدارة شركات الإنترنت",
+    template: "%s | MASH ISP",
+  },
+  description:
+    "نظام SaaS متكامل لإدارة شركات الإنترنت — مشتركون، بطاقات، شبكة، تقارير، وأكثر.",
 };
 
 export default function RootLayout({
@@ -22,8 +24,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ar" dir="rtl" className={cn("h-full", "antialiased", notoSansArabic.variable, "font-sans", geist.variable)}>
-      <body className="min-h-full flex flex-col font-[var(--font-noto-arabic)]">{children}</body>
+    <html lang="ar" dir="rtl" className={cn("h-full antialiased", cairo.variable)}>
+      <body className="min-h-full flex flex-col font-sans">{children}</body>
     </html>
   );
 }

@@ -1,8 +1,6 @@
 ---
-description: قواعد مشروع MASH ISP الملزمة — تُطبق على كل برومبت وكل ملف
 alwaysApply: true
 ---
-
 # قواعد مشروع MASH ISP — ملزمة دائماً
 
 > انسخ هذا الملف إلى `.cursor/rules/mash-isp.mdc` داخل جذر المشروع بعد تنفيذ P0.
