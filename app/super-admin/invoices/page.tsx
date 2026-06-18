@@ -7,6 +7,7 @@ import { RefreshCw, Plus, CheckCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ConfirmInvoicePaymentModal } from '@/components/super-admin/ConfirmInvoicePaymentModal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -133,6 +134,7 @@ export default function SuperAdminInvoicesPage() {
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [paymentConfirmTarget, setPaymentConfirmTarget] = useState<InvoiceRow | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [creating, setCreating] = useState(false)
 
@@ -240,15 +242,10 @@ export default function SuperAdminInvoicesPage() {
     if (plan) setManualAmount(String(planAmount(plan)))
   }
 
-  async function handleConfirmPayment(invoice: InvoiceRow) {
-    if (invoice.status === 'paid' || invoice.status === 'cancelled') return
-
-    if (
-      !confirm(
-        `تأكيد دفع $${invoice.amount} للشركة «${invoice.tenants?.name ?? '—'}»؟`,
-      )
-    ) {
-      return
+  async function confirmPayment(): Promise<boolean> {
+    const invoice = paymentConfirmTarget
+    if (!invoice || invoice.status === 'paid' || invoice.status === 'cancelled') {
+      return false
     }
 
     setConfirming(invoice.id)
@@ -307,9 +304,12 @@ export default function SuperAdminInvoicesPage() {
       toast.success('تم تأكيد الدفع وتمديد الاشتراك')
       void queryClient.invalidateQueries({ queryKey: ['super-admin-invoices'] })
       void queryClient.invalidateQueries({ queryKey: ['super-admin-tenants'] })
+      setPaymentConfirmTarget(null)
+      return true
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'حدث خطأ'
       toast.error('فشل تأكيد الدفع: ' + msg)
+      return false
     } finally {
       setConfirming(null)
     }
@@ -460,7 +460,7 @@ export default function SuperAdminInvoicesPage() {
                     <Button
                       size="sm"
                       disabled={confirming === invoice.id}
-                      onClick={() => void handleConfirmPayment(invoice)}
+                      onClick={() => setPaymentConfirmTarget(invoice)}
                     >
                       <CheckCircle className="size-3.5" />
                       {confirming === invoice.id
@@ -570,6 +570,16 @@ export default function SuperAdminInvoicesPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmInvoicePaymentModal
+        open={paymentConfirmTarget !== null}
+        tenantName={paymentConfirmTarget?.tenants?.name ?? null}
+        amount={paymentConfirmTarget?.amount ?? null}
+        onClose={() => {
+          if (!confirming) setPaymentConfirmTarget(null)
+        }}
+        onConfirm={confirmPayment}
+      />
     </div>
   )
 }

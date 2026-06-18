@@ -7,6 +7,7 @@ import { RefreshCw, Ban, Zap } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { DisableTenantConfirmModal } from '@/components/super-admin/DisableTenantConfirmModal'
 import {
   Dialog,
   DialogContent,
@@ -131,6 +132,7 @@ export default function SuperAdminTenantsPage() {
   )
   const [activating, setActivating] = useState(false)
   const [disabling, setDisabling] = useState<string | null>(null)
+  const [disableTarget, setDisableTarget] = useState<TenantRow | null>(null)
 
   const { data: tenants = [], isLoading, refetch } = useQuery<TenantRow[]>({
     queryKey: ['super-admin-tenants'],
@@ -216,30 +218,26 @@ export default function SuperAdminTenantsPage() {
     }
   }
 
-  async function handleDisable(tenant: TenantRow) {
-    if (
-      !confirm(
-        `هل تريد تعطيل شركة «${tenant.name}»؟ لن يتمكن مستخدموها من الدخول.`,
-      )
-    ) {
-      return
-    }
+  async function confirmDisable(): Promise<boolean> {
+    if (!disableTarget) return false
 
-    setDisabling(tenant.id)
+    setDisabling(disableTarget.id)
     const { error } = await supabase
       .from('tenants')
       .update({ is_active: false })
-      .eq('id', tenant.id)
+      .eq('id', disableTarget.id)
 
     if (error) {
       toast.error('فشل التعطيل: ' + error.message)
       setDisabling(null)
-      return
+      return false
     }
 
-    toast.success(`تم تعطيل «${tenant.name}»`)
+    toast.success(`تم تعطيل «${disableTarget.name}»`)
     void queryClient.invalidateQueries({ queryKey: ['super-admin-tenants'] })
     setDisabling(null)
+    setDisableTarget(null)
+    return true
   }
 
   return (
@@ -320,7 +318,7 @@ export default function SuperAdminTenantsPage() {
                           size="sm"
                           variant="destructive"
                           disabled={disabling === tenant.id}
-                          onClick={() => void handleDisable(tenant)}
+                          onClick={() => setDisableTarget(tenant)}
                         >
                           <Ban className="size-3.5" />
                           {disabling === tenant.id ? 'جاري...' : 'تعطيل'}
@@ -413,6 +411,15 @@ export default function SuperAdminTenantsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DisableTenantConfirmModal
+        open={disableTarget !== null}
+        tenantName={disableTarget?.name ?? null}
+        onClose={() => {
+          if (!disabling) setDisableTarget(null)
+        }}
+        onConfirm={confirmDisable}
+      />
     </div>
   )
 }
