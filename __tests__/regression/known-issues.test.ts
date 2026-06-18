@@ -7,46 +7,51 @@ describe('known-issues regression suite', () => {
   it('① proxy.ts uses getUser() for the first auth check, not getSession()', () => {
     const source = fs.readFileSync(path.join(PROJECT_ROOT, 'proxy.ts'), 'utf8')
 
-    const getUserIndex = source.indexOf('getUser()')
-    const firstAuthBlock = source.slice(0, source.indexOf('// 2.'))
-
+    const firstAuthBlock = source.slice(0, source.indexOf('if (!user)'))
     expect(firstAuthBlock).toContain('getUser()')
     expect(firstAuthBlock).not.toContain('getSession()')
 
-    // getSession is allowed later for force_logout_at comparison only
-    expect(getUserIndex).toBeGreaterThan(-1)
     expect(source).toContain('getSession()')
     const forceLogoutSection = source.slice(source.indexOf('force_logout_at'))
     expect(forceLogoutSection).toContain('getSession()')
   })
 
-  it('② register/page.tsx: session → rpc; no session → verify-email', () => {
+  it('② register/page.tsx: session → complete setup; no session → verify-email', () => {
     const source = fs.readFileSync(
       path.join(PROJECT_ROOT, 'app', '(auth)', 'register', 'page.tsx'),
       'utf8',
     )
 
-    expect(source).toContain('if (data.session)')
-    expect(source).toContain("supabase.rpc('create_tenant_with_trial'")
+    expect(source).toContain('if (data.session && data.user)')
+    expect(source).toContain('fetchOrCompleteUserProfile')
+    expect(source).toContain('resolvePostLoginPath')
     expect(source).toContain("router.push('/verify-email')")
-    expect(source).toContain("router.push('/dashboard')")
 
     const sessionBlock = source.slice(
-      source.indexOf('if (data.session)'),
+      source.indexOf('if (data.session && data.user)'),
       source.indexOf("router.push('/verify-email')"),
     )
-    expect(sessionBlock).toContain('create_tenant_with_trial')
+    expect(sessionBlock).toContain('fetchOrCompleteUserProfile')
     expect(sessionBlock).not.toContain("router.push('/verify-email')")
   })
 
-  it('③ auth/callback/route.ts exists and calls create_tenant_with_trial', () => {
+  it('③ auth/callback/route.ts exists and completes user setup before redirect', () => {
     const callbackPath = path.join(PROJECT_ROOT, 'app', 'auth', 'callback', 'route.ts')
     expect(fs.existsSync(callbackPath)).toBe(true)
 
     const source = fs.readFileSync(callbackPath, 'utf8')
     expect(source).toContain('exchangeCodeForSession')
+    expect(source).toContain('fetchOrCompleteUserProfile')
+    expect(source).toContain('resolvePostLoginPath')
+  })
+
+  it('③b create_tenant_with_trial is called from the shared setup helper', () => {
+    const setupPath = path.join(
+      PROJECT_ROOT, 'lib', 'auth', 'complete-user-setup.ts',
+    )
+    expect(fs.existsSync(setupPath)).toBe(true)
+    const source = fs.readFileSync(setupPath, 'utf8')
     expect(source).toContain("supabase.rpc('create_tenant_with_trial'")
-    expect(source).toContain('/dashboard')
   })
 
   it('④ usePermissions.subscribe removes old channel before creating new one', () => {

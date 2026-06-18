@@ -27,6 +27,7 @@ import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
+import { initSyncEngine, runSyncEngine } from '@/lib/sync/engine'
 
 const NAV_ICONS: Record<DashboardNavIcon, LucideIcon> = {
   LayoutDashboard,
@@ -60,6 +61,12 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const isCashier = role === 'employee'
 
   useRealtimeChannels(tenant?.id ?? '')
+
+  useEffect(() => {
+    const cleanup = initSyncEngine()
+    void runSyncEngine()
+    return cleanup
+  }, [])
 
   useEffect(() => {
     void loadPermissions()

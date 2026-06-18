@@ -173,14 +173,19 @@ function CredentialsContent() {
 
     setAdding(true)
     try {
-      const { error } = await supabase.from('internet_credentials').insert({
-        tenant_id: tenant.id,
-        username,
-        password,
-        type: addType,
-      })
+      const { data: inserted, error } = await supabase
+        .from('internet_credentials')
+        .insert({ tenant_id: tenant.id, username, type: addType })
+        .select('id')
+        .single()
 
       if (error) throw error
+
+      const { error: pwError } = await supabase.rpc('set_credential_password', {
+        p_credential_id: inserted.id,
+        p_password: password,
+      })
+      if (pwError) throw pwError
 
       toast.success('تمت إضافة بيانات الدخول بنجاح')
       setAddUsername('')

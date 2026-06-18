@@ -114,7 +114,6 @@ describe('PROXY_REDIRECT_TARGETS_TEST', () => {
 
   const redirectTargets = [
     '/login',
-    '/register',
     '/suspended',
     '/subscription-expired',
     '/super-admin/tenants',
@@ -135,6 +134,17 @@ describe('PROXY_REDIRECT_TARGETS_TEST', () => {
 
   it('auth callback route exists for email verification flow', () => {
     expect(ALL_APP_ROUTES).toContain('/auth/callback')
+  })
+
+  it('auth/callback redirects to /register on incomplete setup (not proxy.ts)', () => {
+    const callbackSource = fs.readFileSync(
+      path.join(PROJECT_ROOT, 'app', 'auth', 'callback', 'route.ts'),
+      'utf8',
+    )
+    expect(callbackSource, 'auth/callback should redirect to /register on setup failure').toContain(
+      '/register',
+    )
+    expect(ALL_APP_ROUTES, '/register has no page.tsx').toContain('/register')
   })
 })
 

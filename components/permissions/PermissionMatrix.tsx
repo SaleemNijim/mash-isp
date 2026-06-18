@@ -1,54 +1,57 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { throwIfSupabaseError } from '@/lib/supabase/errors'
+import {
+  TENANT_USER_PERMISSIONS_QUERY_KEY,
+  useTenantUsers,
+} from '@/hooks/useTenantUsers'
 import { PERMISSION_CODES, PERMISSION_LABELS, type PermissionCode } from '@/lib/permissions'
 
-interface User {
-  id: string
-  name: string
-  role: string
+function mapPermissionRpcError(message: string): string {
+  if (message.includes('not_authorized')) return 'غير مصرّح — فقط مدير الشركة'
+  if (message.includes('employee_not_found')) return 'الموظف غير موجود أو ليس كاشيراً'
+  if (message.includes('unknown_permission')) return 'صلاحية غير معروفة'
+  if (message.includes('no_tenant_context')) return 'تعذّر تحديد الشركة'
+  return message
 }
 
 export function PermissionMatrix() {
-  const [users, setUsers] = useState<User[]>([])
-  const [userPerms, setUserPerms] = useState<Record<string, Set<string>>>({})
-  const [loading, setLoading] = useState(true)
-  const [toggling, setToggling] = useState<string | null>(null)
+  const { data: users = [], isLoading: loadingUsers } = useTenantUsers()
+  const employees = useMemo(
+    () => users.filter((u) => u.role === 'employee'),
+    [users],
+  )
 
-  const supabase = createClient()
+  const { data: permsData = [], isLoading: loadingPerms } = useQuery({
+    queryKey: TENANT_USER_PERMISSIONS_QUERY_KEY,
+    enabled: employees.length > 0,
+    queryFn: async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase.rpc('list_tenant_user_permissions')
+      throwIfSupabaseError(error)
+      return (Array.isArray(data) ? data : []) as { user_id: string; permission: string }[]
+    },
+    staleTime: 60_000,
+  })
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    const [usersRes, permsRes] = await Promise.all([
-      supabase
-        .from('users')
-        .select('id,name,role')
-        .eq('is_active', true)
-        .not('role', 'in', '(admin,super_admin)')
-        .order('name'),
-      supabase.from('user_permissions').select('user_id,permission'),
-    ])
-
-    if (usersRes.error) {
-      toast.error('فشل تحميل المستخدمين')
-    }
-
+  const userPerms = useMemo(() => {
     const map: Record<string, Set<string>> = {}
-    permsRes.data?.forEach((p) => {
+    permsData.forEach((p) => {
       if (!map[p.user_id]) map[p.user_id] = new Set()
-      map[p.user_id].add(p.permission as string)
+      map[p.user_id].add(p.permission)
     })
+    return map
+  }, [permsData])
 
-    setUsers(usersRes.data ?? [])
-    setUserPerms(map)
-    setLoading(false)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const [toggling, setToggling] = useState<string | null>(null)
+  const supabase = createClient()
+  const queryClient = useQueryClient()
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  const loading = loadingUsers || (employees.length > 0 && loadingPerms)
 
   const toggle = async (userId: string, permission: PermissionCode) => {
     const key = `${userId}:${permission}`
@@ -56,42 +59,22 @@ export function PermissionMatrix() {
 
     const has = userPerms[userId]?.has(permission) ?? false
 
-    if (has) {
-      const { error } = await supabase
-        .from('user_permissions')
-        .delete()
-        .eq('user_id', userId)
-        .eq('permission', permission)
+    const { error } = await supabase.rpc('set_employee_permission', {
+      p_user_id: userId,
+      p_permission: permission,
+      p_grant: !has,
+    })
 
-      if (error) {
-        toast.error('فشل إزالة الصلاحية')
-        setToggling(null)
-        return
-      }
-
-      setUserPerms((prev) => {
-        const next = { ...prev, [userId]: new Set(prev[userId]) }
-        next[userId].delete(permission)
-        return next
-      })
-    } else {
-      const { error } = await supabase
-        .from('user_permissions')
-        .insert({ user_id: userId, permission })
-
-      if (error) {
-        toast.error('فشل منح الصلاحية')
-        setToggling(null)
-        return
-      }
-
-      setUserPerms((prev) => {
-        const next = { ...prev, [userId]: new Set(prev[userId] ?? []) }
-        next[userId].add(permission)
-        return next
-      })
+    if (error) {
+      toast.error(
+        has ? 'فشل إزالة الصلاحية' : 'فشل منح الصلاحية',
+        { description: mapPermissionRpcError(error.message) },
+      )
+      setToggling(null)
+      return
     }
 
+    void queryClient.invalidateQueries({ queryKey: TENANT_USER_PERMISSIONS_QUERY_KEY })
     setToggling(null)
   }
 
@@ -103,7 +86,7 @@ export function PermissionMatrix() {
     )
   }
 
-  if (users.length === 0) {
+  if (employees.length === 0) {
     return (
       <div className="flex items-center justify-center p-12 text-sm text-muted-foreground" dir="rtl">
         لا يوجد موظفون — أضف كاشيراً أولاً لمنحه الصلاحيات.
@@ -130,7 +113,7 @@ export function PermissionMatrix() {
           </tr>
         </thead>
         <tbody>
-          {users.map((user, idx) => (
+          {employees.map((user, idx) => (
             <tr
               key={user.id}
               className={`border-b border-border last:border-0 transition-colors hover:bg-muted/20 ${

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getMyUserProfile } from '@/lib/auth/complete-user-setup'
 
 /**
  * POST /api/pending-tasks/create
@@ -41,11 +42,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '`due_at` مطلوب' }, { status: 400 })
   }
 
-  const { data: profile } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single()
+  const profile = await getMyUserProfile(supabase)
 
   if (!profile?.tenant_id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

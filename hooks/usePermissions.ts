@@ -50,10 +50,14 @@ export const usePermissions = create<PermissionsState>((set, get) => ({
       return
     }
 
-    const [{ data: profile }, { data: perms }] = await Promise.all([
-      supabase.from('users').select('role').eq('id', user.id).single(),
+    // get_my_user_profile() يتجاوز RLS — يضمن وصول role دائماً حتى في
+    // حالات RLS الحدّية (انظر تعليق useTenant.ts لتفاصيل السبب الجذري).
+    const [{ data: profileRows }, { data: perms }] = await Promise.all([
+      supabase.rpc('get_my_user_profile'),
       supabase.from('user_permissions').select('permission').eq('user_id', user.id),
     ])
+
+    const profile = Array.isArray(profileRows) ? profileRows[0] : profileRows
 
     set({
       role: (profile?.role as string) ?? null,

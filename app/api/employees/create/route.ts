@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getMyUserProfile } from '@/lib/auth/complete-user-setup'
 import { DEFAULT_CASHIER_PERMISSIONS } from '@/lib/permissions'
 
 /**
@@ -22,11 +23,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })
   }
 
-  const { data: profile } = await supabase
-    .from('users')
-    .select('role, tenant_id')
-    .eq('id', user.id)
-    .single()
+  const profile = await getMyUserProfile(supabase)
 
   if (!profile?.tenant_id || profile.role !== 'admin') {
     return NextResponse.json(

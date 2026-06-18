@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast, Toaster } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import {
+  authNetworkErrorMessage,
+  isAuthNetworkError,
+  missingSupabaseEnvMessage,
+} from '@/lib/auth/network-error'
 import { resolvePostLoginPath } from '@/lib/auth-redirect'
 import { fetchOrCompleteUserProfile } from '@/lib/auth/complete-user-setup'
 import { Button } from '@/components/ui/button'
@@ -30,15 +35,35 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
 
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    let supabase
+    try {
+      supabase = createClient()
+    } catch (err) {
+      toast.error(missingSupabaseEnvMessage())
+      console.error(err)
+      setLoading(false)
+      return
+    }
 
-    if (error) {
-      toast.error(
-        error.message === 'Invalid login credentials'
-          ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
-          : error.message
-      )
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+      if (error) {
+        if (isAuthNetworkError(error)) {
+          toast.error(authNetworkErrorMessage())
+        } else {
+          toast.error(
+            error.message === 'Invalid login credentials'
+              ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
+              : error.message,
+          )
+        }
+        setLoading(false)
+        return
+      }
+    } catch (err) {
+      toast.error(isAuthNetworkError(err) ? authNetworkErrorMessage() : 'فشل تسجيل الدخول')
+      console.error(err)
       setLoading(false)
       return
     }

@@ -1,12 +1,18 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
+import { getPublicSupabaseEnv } from '@/lib/supabase/env'
 
 export function createMiddlewareClient(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
+  const env = getPublicSupabaseEnv()
+  if (!env) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    env.url,
+    env.anonKey,
     {
       cookies: {
         getAll() {

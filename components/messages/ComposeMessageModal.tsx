@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Send } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { useTenantEmployees } from '@/hooks/useTenantUsers'
 import {
   Dialog,
   DialogContent,
@@ -67,20 +68,9 @@ export function ComposeMessageModal({ open, onClose, mode }: ComposeMessageModal
     },
   })
 
-  const { data: employees = [] } = useQuery({
-    queryKey: ['compose-employees'],
-    enabled: open && mode === 'admin_to_employees',
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, name')
-        .eq('role', 'employee')
-        .eq('is_active', true)
-        .order('name')
-      if (error) throw error
-      return data ?? []
-    },
-  })
+  const { data: employees = [] } = useTenantEmployees(
+    open && mode === 'admin_to_employees',
+  )
 
   function reset() {
     setTitle('')

@@ -1,24 +1,29 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { UserPlus, UserX, RefreshCw } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
+import { useCurrentUserId } from '@/hooks/useMessages'
+import {
+  TENANT_USER_PERMISSIONS_QUERY_KEY,
+  TENANT_USERS_QUERY_KEY,
+  useTenantUsers,
+} from '@/hooks/useTenantUsers'
 import { usePermissions } from '@/hooks/usePermissions'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import { PermissionMatrix } from '@/components/permissions/PermissionMatrix'
+import { SuspendUserConfirmModal } from '@/components/permissions/SuspendUserConfirmModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 
-interface TenantUser {
-  id: string
-  name: string
-  role: string
-  is_active: boolean
+function invalidateTenantUserQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: TENANT_USERS_QUERY_KEY })
+  void queryClient.invalidateQueries({ queryKey: TENANT_USER_PERMISSIONS_QUERY_KEY })
 }
 
 export default function PermissionsPage() {
@@ -33,9 +38,13 @@ function PermissionsContent() {
   const supabase = createClient()
   const queryClient = useQueryClient()
   const { data: tenant } = useTenant()
+  const { data: authUserId } = useCurrentUserId()
   const currentRole = usePermissions((s) => s.role)
 
-  const [suspending, setSuspending] = useState<string | null>(null)
+  const [suspendTarget, setSuspendTarget] = useState<{ id: string; name: string } | null>(
+    null,
+  )
+  const [suspending, setSuspending] = useState(false)
 
   const [empName, setEmpName] = useState('')
   const [empEmail, setEmpEmail] = useState('')
@@ -44,21 +53,15 @@ function PermissionsContent() {
 
   const isAdmin = currentRole === 'admin' || currentRole === 'super_admin'
 
-  const { data: users = [], isLoading: loadingUsers, refetch } = useQuery<TenantUser[]>({
-    queryKey: ['permissions-users', tenant?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id,name,role,is_active')
-        .eq('is_active', true)
-        .not('role', 'in', '(super_admin)')
-        .order('name')
+  const {
+    data: users = [],
+    isLoading: loadingUsers,
+    refetch,
+    isError: usersError,
+    error: usersLoadError,
+  } = useTenantUsers()
 
-      if (error) throw error
-      return data ?? []
-    },
-    enabled: !!tenant?.id,
-  })
+  const currentAdmin = users.find((u) => u.id === authUserId)
 
   async function handleAddEmployee(e: React.FormEvent) {
     e.preventDefault()
@@ -95,34 +98,29 @@ function PermissionsContent() {
     setEmpName('')
     setEmpEmail('')
     setEmpPassword('')
-    void queryClient.invalidateQueries({ queryKey: ['permissions-users'] })
+    invalidateTenantUserQueries(queryClient)
     setAdding(false)
   }
 
-  async function handleSuspend(userId: string, userName: string) {
-    if (!confirm(`هل تريد تعليق المستخدم «${userName}»؟ سيُخرج فوراً عند أول تنقّل.`)) {
-      return
-    }
+  async function confirmSuspend(): Promise<boolean> {
+    if (!suspendTarget) return false
 
-    setSuspending(userId)
-
-    const { error } = await supabase
-      .from('users')
-      .update({
-        is_active: false,
-        force_logout_at: new Date().toISOString(),
-      })
-      .eq('id', userId)
+    setSuspending(true)
+    const { error } = await supabase.rpc('suspend_tenant_employee', {
+      p_user_id: suspendTarget.id,
+    })
 
     if (error) {
+      setSuspending(false)
       toast.error('فشل تعليق المستخدم: ' + error.message)
-      setSuspending(null)
-      return
+      return false
     }
 
-    toast.success(`تم تعليق «${userName}» — سيُخرج عند أول تنقّل`)
-    void queryClient.invalidateQueries({ queryKey: ['permissions-users'] })
-    setSuspending(null)
+    toast.success(`تم تعليق «${suspendTarget.name}» — سيُخرج عند أول تنقّل`)
+    invalidateTenantUserQueries(queryClient)
+    setSuspending(false)
+    setSuspendTarget(null)
+    return true
   }
 
   const ROLE_LABELS: Record<string, string> = {
@@ -137,6 +135,14 @@ function PermissionsContent() {
         <p className="mt-1 text-sm text-gray-500">
           إدارة موظفي الشركة ومصفوفة الصلاحيات
         </p>
+        {currentAdmin && (
+          <p className="mt-2 text-xs text-gray-500">
+            مسجّل الدخول:{' '}
+            <span className="font-medium text-gray-800">{currentAdmin.name}</span>
+            <span className="text-gray-400"> · </span>
+            {ROLE_LABELS[currentAdmin.role] ?? currentAdmin.role}
+          </p>
+        )}
       </div>
 
       {isAdmin && (
@@ -176,12 +182,16 @@ function PermissionsContent() {
                 type="password"
                 value={empPassword}
                 onChange={(e) => setEmpPassword(e.target.value)}
-                placeholder="8 أحرف على الأقل"
+                placeholder="••••••••"
                 required
                 minLength={8}
                 dir="ltr"
                 className="text-right"
+                aria-describedby="empPassword-hint"
               />
+              <p id="empPassword-hint" className="text-xs text-gray-500">
+                8 أحرف على الأقل
+              </p>
             </div>
             <div className="flex items-end">
               <Button type="submit" disabled={adding} className="w-full">
@@ -203,6 +213,11 @@ function PermissionsContent() {
 
         {loadingUsers ? (
           <p className="text-sm text-gray-500">جارٍ التحميل...</p>
+        ) : usersError ? (
+          <p className="text-sm text-red-600">
+            تعذّر تحميل المستخدمين:{' '}
+            {usersLoadError instanceof Error ? usersLoadError.message : 'خطأ غير معروف'}
+          </p>
         ) : users.length === 0 ? (
           <p className="text-sm text-gray-500">لا يوجد مستخدمون نشطون.</p>
         ) : (
@@ -222,11 +237,13 @@ function PermissionsContent() {
                   <Button
                     variant="destructive"
                     size="sm"
-                    disabled={suspending === user.id}
-                    onClick={() => void handleSuspend(user.id, user.name)}
+                    disabled={suspending && suspendTarget?.id === user.id}
+                    onClick={() => setSuspendTarget({ id: user.id, name: user.name })}
                   >
                     <UserX size={14} className="ml-1" />
-                    {suspending === user.id ? 'جارٍ التعليق...' : 'تعليق مستخدم'}
+                    {suspending && suspendTarget?.id === user.id
+                      ? 'جارٍ التعليق...'
+                      : 'تعليق مستخدم'}
                   </Button>
                 )}
               </div>
@@ -239,6 +256,15 @@ function PermissionsContent() {
         <h2 className="mb-4 text-base font-semibold text-gray-900">مصفوفة الصلاحيات</h2>
         <PermissionMatrix />
       </section>
+
+      <SuspendUserConfirmModal
+        open={suspendTarget !== null}
+        employeeName={suspendTarget?.name ?? null}
+        onClose={() => {
+          if (!suspending) setSuspendTarget(null)
+        }}
+        onConfirm={confirmSuspend}
+      />
     </div>
   )
 }

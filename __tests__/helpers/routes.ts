@@ -93,7 +93,9 @@ const HREF_PATTERNS = [
   /href=\{["'](\/[^"'#]+)["']\}/g,
   /router\.push\(["'](\/[^"'#]+)["']\)/g,
   /redirect\(.*?new URL\(["'](\/[^"'#?]+)/g,
-  /redirect\(`\$\{origin\}(\/[^`?#]+)/g,
+  // template literals كـ `${origin}/register${q}` — التوقف أيضاً عند `$`
+  // لتجنّب التقاط بداية متغير JS لاحق (${q}) كجزء من المسار الحرفي.
+  /redirect\(`\$\{origin\}(\/[^`?#$]+)/g,
 ]
 
 /** Scans app/ and components/ for internal href="/..." links. */

@@ -396,23 +396,32 @@ export default function DashboardPage() {
   const { data: tenant } = useTenant()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [loadMs, setLoadMs] = useState<number | null>(null)
   const [pendingTasks, setPendingTasks] = useState<number | null>(null)
 
   const reload = useCallback(async () => {
     if (!tenant?.id) return
+    setLoading(true)
+    setLoadError(null)
     const t0 = performance.now()
-    const result = await fetchDashboardData(tenant.id)
-    const elapsed = Math.round(performance.now() - t0)
-    setData(result)
-    setPendingTasks(result.kpis.pendingTasks)
-    setLoadMs(elapsed)
-    setLoading(false)
+    try {
+      const result = await fetchDashboardData(tenant.id)
+      const elapsed = Math.round(performance.now() - t0)
+      setData(result)
+      setPendingTasks(result.kpis.pendingTasks)
+      setLoadMs(elapsed)
+    } catch (err) {
+      setLoadError(
+        err instanceof Error ? err.message : 'فشل تحميل بيانات لوحة القيادة',
+      )
+    } finally {
+      setLoading(false)
+    }
   }, [tenant?.id])
 
   useEffect(() => {
     if (!tenant?.id) return
-    setLoading(true)
     void reload()
   }, [tenant?.id, reload])
 
@@ -447,6 +456,20 @@ export default function DashboardPage() {
       supabase.removeChannel(channel)
     }
   }, [tenant?.id])
+
+  if (loadError) {
+    return (
+      <div dir="rtl" className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+        <p className="text-sm text-red-600">تعذّر تحميل لوحة القيادة: {loadError}</p>
+        <button
+          onClick={() => void reload()}
+          className="rounded-md border border-mash-border px-4 py-2 text-sm text-mash-text hover:bg-mash-page"
+        >
+          إعادة المحاولة
+        </button>
+      </div>
+    )
+  }
 
   if (loading || !data) {
     return (

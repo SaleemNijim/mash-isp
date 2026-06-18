@@ -334,7 +334,7 @@ async function importBroadbandCredentials(
   })
 
   if (validRows.length > 0) {
-    await batchInsert(supabase, 'internet_credentials', validRows)
+    await supabase.rpc('bulk_insert_credentials', { p_rows: validRows })
   }
 
   return { total, inserted: validRows.length, updated: 0, skipped, errors }

@@ -56,12 +56,12 @@ describeIfSupabase('multi-tenant security (§8.1)', () => {
 })
 
 describe('S9 — Realtime isolation', () => {
-  it.skip(
+  const reason =
     hasSupabaseEnv() && hasTenantJwts()
-      ? undefined
-      : skipReason(hasSupabaseEnv() ? 'jwts' : 'supabase'),
-    () => {
-      // Requires two live browser sessions — manual QA documented in docs/TESTING.md
-    },
-  )
+      ? 'manual QA — requires two live browser sessions, documented in docs/TESTING.md'
+      : skipReason(hasSupabaseEnv() ? 'jwts' : 'supabase')
+
+  it.skip(reason, () => {
+    // Requires two live browser sessions — manual QA documented in docs/TESTING.md
+  })
 })

@@ -39,13 +39,11 @@ function PasswordCell({ credentialId }: { credentialId: string }) {
   async function handleReveal() {
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('internet_credentials')
-        .select('password')
-        .eq('id', credentialId)
-        .single()
+      const { data, error } = await supabase.rpc('reveal_credential_password', {
+        p_credential_id: credentialId,
+      })
       if (error) throw error
-      setPassword(data?.password ?? '')
+      setPassword(data ?? '')
       setVisible(true)
     } finally {
       setLoading(false)

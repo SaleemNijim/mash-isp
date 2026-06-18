@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { throwIfSupabaseError } from '@/lib/supabase/errors'
 import {
   type InboxMessage,
   type MessageChannel,
@@ -12,36 +13,21 @@ import {
   senderDisplayName,
 } from '@/lib/messages'
 
-function normalizeSender(raw: unknown): { name: string; role: string | null } {
-  if (Array.isArray(raw)) {
-    const u = raw[0] as { name?: string; role?: string } | undefined
-    return { name: u?.name ?? '', role: u?.role ?? null }
-  }
-  if (raw && typeof raw === 'object') {
-    const u = raw as { name?: string; role?: string }
-    return { name: u.name ?? '', role: u.role ?? null }
-  }
-  return { name: '', role: null }
-}
-
-function mapInboxRow(row: Record<string, unknown>): InboxMessage | null {
-  const msg = row.message as Record<string, unknown> | null
-  if (!msg) return null
-  const sender = normalizeSender(msg.sender)
-  const channel = msg.channel as MessageChannel
+function mapRpcInboxRow(row: Record<string, unknown>): InboxMessage {
+  const channel = row.channel as MessageChannel
   return {
-    recipientId: row.id as string,
+    recipientId: row.recipient_id as string,
     readAt: (row.read_at as string | null) ?? null,
-    receivedAt: row.created_at as string,
-    id: msg.id as string,
-    title: msg.title as string,
-    body: msg.body as string,
+    receivedAt: row.received_at as string,
+    id: row.message_id as string,
+    title: row.title as string,
+    body: row.body as string,
     channel,
-    priority: msg.priority as MessagePriority,
-    category: msg.category as MessageCategory,
-    sentAt: msg.created_at as string,
-    senderName: senderDisplayName(channel, sender.name),
-    senderRole: sender.role,
+    priority: row.priority as MessagePriority,
+    category: row.category as MessageCategory,
+    sentAt: row.sent_at as string,
+    senderName: senderDisplayName(channel, row.sender_name as string | null),
+    senderRole: (row.sender_role as string | null) ?? null,
   }
 }
 
@@ -63,34 +49,27 @@ export function useInbox(userId: string | null | undefined) {
     enabled: !!userId,
     queryFn: async (): Promise<InboxMessage[]> => {
       const supabase = createClient()
-      const { data, error } = await supabase
-        .from('message_recipients')
-        .select(`
-          id,
-          read_at,
-          created_at,
-          message:internal_messages (
-            id,
-            title,
-            body,
-            channel,
-            priority,
-            category,
-            created_at,
-            sender:users!internal_messages_sender_id_fkey ( name, role )
-          )
-        `)
-        .eq('recipient_user_id', userId!)
-        .order('created_at', { ascending: false })
-        .limit(100)
-
-      if (error) throw error
-      return (data ?? [])
-        .map((row) => mapInboxRow(row as Record<string, unknown>))
-        .filter((m): m is InboxMessage => m !== null)
+      const { data, error } = await supabase.rpc('get_my_inbox')
+      throwIfSupabaseError(error)
+      return (Array.isArray(data) ? data : []).map((row) =>
+        mapRpcInboxRow(row as Record<string, unknown>),
+      )
     },
     refetchInterval: 60_000,
   })
+}
+
+function mapRpcSentRow(row: Record<string, unknown>): SentMessage {
+  return {
+    id: row.message_id as string,
+    title: row.title as string,
+    body: row.body as string,
+    channel: row.channel as MessageChannel,
+    priority: row.priority as MessagePriority,
+    category: row.category as MessageCategory,
+    sentAt: row.sent_at as string,
+    recipientCount: Number(row.recipient_count ?? 0),
+  }
 }
 
 export function useSentMessages(userId: string | null | undefined, enabled: boolean) {
@@ -99,37 +78,11 @@ export function useSentMessages(userId: string | null | undefined, enabled: bool
     enabled: !!userId && enabled,
     queryFn: async (): Promise<SentMessage[]> => {
       const supabase = createClient()
-      const { data, error } = await supabase
-        .from('internal_messages')
-        .select(`
-          id,
-          title,
-          body,
-          channel,
-          priority,
-          category,
-          created_at,
-          message_recipients ( id )
-        `)
-        .eq('sender_id', userId!)
-        .order('created_at', { ascending: false })
-        .limit(50)
-
-      if (error) throw error
-
-      return (data ?? []).map((row) => {
-        const rec = row.message_recipients as { id: string }[] | null
-        return {
-          id: row.id as string,
-          title: row.title as string,
-          body: row.body as string,
-          channel: row.channel as MessageChannel,
-          priority: row.priority as MessagePriority,
-          category: row.category as MessageCategory,
-          sentAt: row.created_at as string,
-          recipientCount: rec?.length ?? 0,
-        }
-      })
+      const { data, error } = await supabase.rpc('get_my_sent_messages')
+      throwIfSupabaseError(error)
+      return (Array.isArray(data) ? data : []).map((row) =>
+        mapRpcSentRow(row as Record<string, unknown>),
+      )
     },
   })
 }
@@ -140,15 +93,11 @@ export function useUnreadMessageCount(userId: string | null | undefined) {
     enabled: !!userId,
     queryFn: async () => {
       const supabase = createClient()
-      const { count, error } = await supabase
-        .from('message_recipients')
-        .select('*', { count: 'exact', head: true })
-        .eq('recipient_user_id', userId!)
-        .is('read_at', null)
-
-      if (error) throw error
-      return count ?? 0
+      const { data, error } = await supabase.rpc('get_my_unread_message_count')
+      throwIfSupabaseError(error)
+      return typeof data === 'number' ? data : Number(data ?? 0)
     },
+    staleTime: 0,
     refetchInterval: 30_000,
   })
 }
@@ -168,7 +117,7 @@ export function useMessageMutations(userId: string | null | undefined) {
       const { error } = await supabase.rpc('mark_message_read', {
         p_recipient_id: recipientId,
       })
-      if (error) throw error
+      throwIfSupabaseError(error)
     },
     onSuccess: invalidate,
   })
@@ -177,7 +126,7 @@ export function useMessageMutations(userId: string | null | undefined) {
     mutationFn: async () => {
       const supabase = createClient()
       const { error } = await supabase.rpc('mark_all_messages_read')
-      if (error) throw error
+      throwIfSupabaseError(error)
     },
     onSuccess: invalidate,
   })
@@ -207,16 +156,27 @@ export function useMessageRealtime(
         },
         async (payload) => {
           const messageId = (payload.new as { message_id?: string }).message_id
-          if (messageId && onNewMessage) {
-            const { data } = await supabase
-              .from('internal_messages')
-              .select('title, priority')
-              .eq('id', messageId)
-              .single()
-            if (data) {
-              onNewMessage(data.title, data.priority as MessagePriority)
+          let title = 'رسالة جديدة'
+          let priority: MessagePriority = 'normal'
+
+          if (messageId) {
+            const { data } = await supabase.rpc('peek_inbox_message', {
+              p_message_id: messageId,
+            })
+            const row = Array.isArray(data) ? data[0] : data
+            if (row && typeof row === 'object' && 'title' in row) {
+              const peek = row as { title: string; priority: string }
+              if (peek.title) title = peek.title
+              if (peek.priority) priority = peek.priority as MessagePriority
             }
           }
+
+          onNewMessage?.(title, priority)
+
+          queryClient.setQueryData<number>(
+            ['messages-unread-count', userId],
+            (prev) => (typeof prev === 'number' ? prev : 0) + 1,
+          )
           void queryClient.invalidateQueries({ queryKey: ['messages-inbox', userId] })
           void queryClient.invalidateQueries({ queryKey: ['messages-unread-count', userId] })
         },

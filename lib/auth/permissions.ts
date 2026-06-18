@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getMyUserProfile } from '@/lib/auth/complete-user-setup'
 
 /**
  * Asserts the current server-side user holds `permission`.
@@ -20,13 +21,13 @@ export async function requirePermission(permission: string): Promise<void> {
     throw new Error('Unauthorized')
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  // get_my_user_profile() يتجاوز RLS عبر SECURITY DEFINER — القراءة
+  // المباشرة من users كانت تفشل بصمت (profileError بدون رمي استثناء
+  // واضح) في حالات RLS الحدّية، وهذا خطر أمني أكبر هنا تحديداً لأن هذه
+  // الدالة هي بوّابة التحقق قبل أي تعديل بيانات على السيرفر.
+  const profile = await getMyUserProfile(supabase)
 
-  if (profileError || !profile) {
+  if (!profile) {
     throw new Error('Unauthorized')
   }
 
