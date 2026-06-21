@@ -4,6 +4,13 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import {
+  formatWarehouseQuantity,
+  isValidQuantityInput,
+  quantityStep,
+  WAREHOUSE_UNIT_LABELS,
+  type WarehouseUnit,
+} from '@/lib/warehouse/units'
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -20,6 +27,8 @@ export interface WarehouseItemTarget {
   id: string
   name: string
   quantity: number
+  unit: WarehouseUnit
+  notes?: string | null
 }
 
 export const MOVEMENT_TYPE_LABELS: Record<WarehouseMovementType, string> = {
@@ -49,6 +58,9 @@ export function MovementModal({
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
 
+  const unit = item?.unit ?? 'piece'
+  const unitLabel = WAREHOUSE_UNIT_LABELS[unit]
+
   useEffect(() => {
     if (!open) return
     setQuantity('')
@@ -60,8 +72,12 @@ export function MovementModal({
     if (!item || !movementType) return
 
     const qty = Number(quantity)
-    if (!Number.isInteger(qty) || qty <= 0) {
-      toast.error('الكمية يجب أن تكون عدداً صحيحاً موجباً')
+    if (!isValidQuantityInput(qty, unit)) {
+      toast.error(
+        unit === 'piece'
+          ? 'الكمية يجب أن تكون عدداً صحيحاً موجباً'
+          : 'أدخل طولاً صحيحاً بالمتر',
+      )
       return
     }
 
@@ -77,7 +93,7 @@ export function MovementModal({
       if (error) throw error
 
       toast.success(
-        `تم تسجيل ${MOVEMENT_TYPE_LABELS[movementType]} — ${qty.toLocaleString('ar-EG')} وحدة`,
+        `تم تسجيل ${MOVEMENT_TYPE_LABELS[movementType]} — ${formatWarehouseQuantity(qty, unit)} ${unitLabel}`,
       )
       onSuccess()
       onClose()
@@ -106,40 +122,58 @@ export function MovementModal({
 
           <div className="space-y-4 py-2">
             {item && (
-              <div className="rounded-lg bg-muted/50 p-3 text-sm">
-                <span className="text-muted-foreground">الرصيد الحالي: </span>
-                <strong className="tabular-nums">
-                  {item.quantity.toLocaleString('ar-EG')} وحدة
-                </strong>
+              <div className="rounded-xl border border-border bg-muted/30 p-3 text-sm space-y-1">
+                <p>
+                  <span className="text-muted-foreground">الرصيد الحالي: </span>
+                  <strong className="tabular-nums">
+                    {formatWarehouseQuantity(item.quantity, unit)} {unitLabel}
+                  </strong>
+                </p>
+                {item.notes?.trim() && (
+                  <p className="text-xs text-muted-foreground">{item.notes}</p>
+                )}
               </div>
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="movement-qty">الكمية</Label>
+              <Label htmlFor="movement-qty">
+                الكمية ({unitLabel})
+              </Label>
               <Input
                 id="movement-qty"
                 type="number"
-                min={1}
-                step={1}
+                min={unit === 'meter' ? 0.001 : 1}
+                step={quantityStep(unit)}
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
-                placeholder="أدخل الكمية"
+                placeholder={unit === 'meter' ? 'مثال: 5' : '1'}
                 disabled={loading}
                 dir="ltr"
                 className="text-left tabular-nums"
                 required
               />
+              {unit === 'meter' && (
+                <p className="text-xs text-muted-foreground">
+                  يمكن إدخال كسور — مثال: 5.5 متر
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="movement-notes">ملاحظات (اختياري)</Label>
-              <Input
+              <Label htmlFor="movement-notes">ملاحظات</Label>
+              <textarea
                 id="movement-notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="ملاحظات إضافية…"
+                placeholder={
+                  movementType === 'issue'
+                    ? 'مثال: صرف لتركيب مشترك أحمد — 5 متر'
+                    : 'ملاحظات إضافية…'
+                }
                 disabled={loading}
                 dir="rtl"
+                rows={2}
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
               />
             </div>
           </div>

@@ -1,4 +1,4 @@
-/** 12 صلاحية من seed — المصدر الوحيد للحقيقة في الواجهة */
+/** 13 صلاحية — المصدر الوحيد للحقيقة في الواجهة */
 export const PERMISSION_CODES = [
   'view_full_password',
   'delete_records',
@@ -7,6 +7,7 @@ export const PERMISSION_CODES = [
   'manage_bank_accounts',
   'renew_subscriptions',
   'sell_cards',
+  'manage_card_inventory',
   'manage_network',
   'manage_warehouse',
   'import_excel',
@@ -24,6 +25,7 @@ export const PERMISSION_LABELS: Record<PermissionCode, string> = {
   manage_bank_accounts: 'إدارة الحسابات البنكية',
   renew_subscriptions:  'تجديد الاشتراكات',
   sell_cards:           'بيع البطاقات',
+  manage_card_inventory:'إدارة مخزون البطاقات',
   manage_network:       'إدارة الشبكة',
   manage_warehouse:     'إدارة المستودع',
   import_excel:         'استيراد Excel',

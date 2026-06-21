@@ -155,7 +155,7 @@ function buildAlerts(
       severity: 'critical',
       title: 'اشتراكات تنتهي اليوم',
       description: `${expiringToday} اشتراك${expiringToday === 1 ? '' : 'اً'} ينتهي اليوم`,
-      href: '/subscriptions',
+      href: '/customers?filter=expiring_soon',
     })
   }
 
@@ -185,7 +185,7 @@ function buildAlerts(
       severity: 'warning',
       title: 'بطاقات تحت الحد الأدنى',
       description: `${cardsUnderLimit} منتج${cardsUnderLimit === 1 ? '' : 'اً'} تحت الحد الأدنى للمخزون`,
-      href: '/card-products',
+      href: '/card-inventory',
     })
   }
 
@@ -507,20 +507,20 @@ export default function DashboardPage() {
           label="اشتراكات نشطة"
           value={kpis.activeSubscriptions}
           icon={Wifi}
-          href="/subscriptions"
+          href="/customers?filter=active"
         />
         <KpiCard
           label="تنتهي خلال 7 أيام"
           value={kpis.expiringIn7Days}
           icon={Clock}
-          href="/subscriptions"
+          href="/customers?filter=expiring_soon"
           highlight={kpis.expiringIn7Days > 0 ? 'warning' : undefined}
         />
         <KpiCard
           label="إيرادات اليوم"
           value={formatMoney(kpis.todayRevenue)}
           icon={DollarSign}
-          href="/payments"
+          href="/bank-accounts"
         />
         <KpiCard
           label="ديون نشطة"
@@ -546,7 +546,7 @@ export default function DashboardPage() {
           label="بطاقات تحت الحد"
           value={kpis.cardsUnderLimit}
           icon={CreditCard}
-          href="/card-products"
+          href="/card-inventory"
           highlight={kpis.cardsUnderLimit > 0 ? 'warning' : undefined}
         />
         <KpiCard

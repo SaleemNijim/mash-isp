@@ -1,21 +1,30 @@
 'use client'
 
-import {
-  useState,
-  useEffect,
-  useRef,
-  useMemo,
-  useCallback,
-} from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import Link from 'next/link'
 import { toast } from 'sonner'
-import { RefreshCw, Search, Upload, CheckCircle2 } from 'lucide-react'
+import { RefreshCw, Search, Upload, CheckCircle2, Wallet, ExternalLink, Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { useInfiniteVirtualData } from '@/hooks/useInfiniteVirtualData'
 import { useTenant } from '@/hooks/useTenant'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import { AccountSelector } from '@/components/subscriptions/AccountSelector'
+import {
+  SettleCustomerDebtModal,
+  type CustomerDebtTarget,
+} from '@/components/debts/SettleCustomerDebtModal'
+import { CreatePendingTaskModal } from '@/components/pending-tasks/CreatePendingTaskModal'
+import { uploadPaymentProof, attachProofToPayment } from '@/lib/payment-proof'
+import {
+  fetchPendingInbox,
+  inboxKindLabel,
+  inboxMethodLabel,
+  TASK_SCOPE_LABELS,
+  type PendingInboxItem,
+  type PendingInboxKind,
+} from '@/lib/pending-tasks/inbox'
+import { invalidateDebtQueries } from '@/lib/debts/invalidate-debt-queries'
+import { formatMoney } from '@/lib/format-money'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -27,43 +36,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
-type TaskStatus = 'pending' | 'reminded' | 'converted_to_debt' | 'completed'
-
-interface PendingTaskRow {
-  id: string
-  tenant_id: string
-  customer_id: string
-  related_payment_id: string | null
-  amount: number | null
-  due_at: string | null
-  status: TaskStatus
-  created_at: string
-}
-
-interface CustomerRow {
-  id: string
-  name: string
-  phone: string | null
-}
-
-type StatusFilter = 'all' | TaskStatus
-
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  pending: 'معلّقة',
-  reminded: 'تم التذكير',
-  converted_to_debt: 'تحوّلت لدين',
-  completed: 'مكتملة',
-}
-
-const STATUS_VARIANT: Record<
-  TaskStatus,
-  'default' | 'secondary' | 'destructive' | 'outline'
-> = {
-  pending: 'secondary',
-  reminded: 'outline',
-  converted_to_debt: 'destructive',
-  completed: 'default',
-}
+type KindFilter = 'all' | PendingInboxKind
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -85,12 +58,6 @@ function formatDateTime(iso: string | null): string {
   })
 }
 
-interface EnrichedTask extends PendingTaskRow {
-  customer_name: string
-  phone: string
-  has_proof: boolean
-}
-
 export default function PendingTasksPage() {
   return <PendingTasksContent />
 }
@@ -98,148 +65,69 @@ export default function PendingTasksPage() {
 function PendingTasksContent() {
   const supabase = createClient()
   const queryClient = useQueryClient()
-  const containerRef = useRef<HTMLDivElement>(null)
   const { data: tenant } = useTenant()
 
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search, 300)
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [kindFilter, setKindFilter] = useState<KindFilter>('all')
 
-  const [uploadTarget, setUploadTarget] = useState<EnrichedTask | null>(null)
+  const [uploadTarget, setUploadTarget] = useState<PendingInboxItem | null>(null)
   const [bankAccountId, setBankAccountId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [debtTarget, setDebtTarget] = useState<CustomerDebtTarget | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
 
-  const {
-    allItems,
-    isLoading,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
-    refetch,
-  } = useInfiniteVirtualData('pending_tasks', [], '')
-
-  const tasks = allItems as PendingTaskRow[]
-
-  const customerIds = useMemo(
-    () => [...new Set(tasks.map((t) => t.customer_id))],
-    [tasks],
-  )
-
-  const paymentIds = useMemo(
-    () =>
-      tasks
-        .map((t) => t.related_payment_id)
-        .filter((id): id is string => !!id),
-    [tasks],
-  )
-
-  const { data: customers = [] } = useQuery<CustomerRow[]>({
-    queryKey: ['pending-task-customers', customerIds.join(',')],
+  const { data: inboxData, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['pending-inbox', tenant?.id],
     queryFn: async () => {
-      if (customerIds.length === 0) return []
-      const { data, error } = await supabase
-        .from('customers')
-        .select('id, name, phone')
-        .in('id', customerIds)
-        .eq('is_deleted', false)
-      if (error) throw error
-      return data ?? []
+      if (!tenant?.id) return []
+      return fetchPendingInbox(supabase, tenant.id)
     },
-    enabled: customerIds.length > 0,
+    enabled: !!tenant?.id,
   })
 
-  const { data: proofPaymentIds = [] } = useQuery<string[]>({
-    queryKey: ['payment-proofs-by-payment', paymentIds.join(',')],
-    queryFn: async () => {
-      if (paymentIds.length === 0) return []
-      const { data, error } = await supabase
-        .from('payment_proofs')
-        .select('payment_id')
-        .in('payment_id', paymentIds)
-        .eq('is_deleted', false)
-      if (error) throw error
-      return (data ?? []).map((r) => r.payment_id as string)
-    },
-    enabled: paymentIds.length > 0,
-  })
-
-  const customerMap = useMemo(() => {
-    const m = new Map<string, CustomerRow>()
-    for (const c of customers) m.set(c.id, c)
-    return m
-  }, [customers])
-
-  const proofSet = useMemo(() => new Set(proofPaymentIds), [proofPaymentIds])
-
-  const enriched = useMemo<EnrichedTask[]>(() => {
-    return tasks.map((t) => {
-      const c = customerMap.get(t.customer_id)
-      return {
-        ...t,
-        customer_name: c?.name ?? '—',
-        phone: c?.phone ?? '',
-        has_proof: t.related_payment_id
-          ? proofSet.has(t.related_payment_id)
-          : false,
-      }
-    })
-  }, [tasks, customerMap, proofSet])
+  const inbox = Array.isArray(inboxData) ? inboxData : []
 
   const filtered = useMemo(() => {
-    let rows = enriched
-
+    let rows = inbox
+    if (kindFilter !== 'all') {
+      rows = rows.filter((r) => r.kind === kindFilter)
+    }
     if (debouncedSearch.trim()) {
       const q = debouncedSearch.trim().toLowerCase()
       rows = rows.filter(
         (r) =>
           r.customer_name.toLowerCase().includes(q) ||
-          r.phone.includes(q),
+          r.phone.includes(q) ||
+          (r.reason?.toLowerCase().includes(q) ?? false) ||
+          (r.task_notes?.toLowerCase().includes(q) ?? false) ||
+          (r.task_title?.toLowerCase().includes(q) ?? false),
       )
     }
-
-    if (statusFilter !== 'all') {
-      rows = rows.filter((r) => r.status === statusFilter)
-    }
-
     return rows
-  }, [enriched, debouncedSearch, statusFilter])
+  }, [inbox, kindFilter, debouncedSearch])
 
-  const virtualizer = useVirtualizer({
-    count: filtered.length,
-    getScrollElement: () => containerRef.current,
-    estimateSize: () => 56,
-    overscan: 10,
-  })
+  const counts = useMemo(
+    () => ({
+      all: inbox.length,
+      task: inbox.filter((i) => i.kind === 'task').length,
+      debt: inbox.filter((i) => i.kind === 'debt').length,
+      transfer: inbox.filter((i) => i.kind === 'transfer').length,
+    }),
+    [inbox],
+  )
 
-  const handleScroll = useCallback(() => {
-    const el = containerRef.current
-    if (!el || !hasNextPage || isFetchingNextPage) return
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200
-    if (nearBottom) void fetchNextPage()
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    el.addEventListener('scroll', handleScroll)
-    return () => el.removeEventListener('scroll', handleScroll)
-  }, [handleScroll])
-
-  const invalidateAll = () => {
+  const invalidateAll = async () => {
     void refetch()
-    void queryClient.invalidateQueries({ queryKey: ['pending_tasks'] })
-    void queryClient.invalidateQueries({ queryKey: ['pending-tasks-count'] })
-    void queryClient.invalidateQueries({ queryKey: ['payment-proofs-by-payment'] })
+    await invalidateDebtQueries(queryClient)
+    void queryClient.invalidateQueries({ queryKey: ['pending-inbox'] })
+    void queryClient.invalidateQueries({ queryKey: ['pending-inbox-count'] })
+    void queryClient.invalidateQueries({ queryKey: ['financial-overview'] })
   }
 
   const handleUploadProof = async (file: File) => {
     if (!uploadTarget || !tenant) return
-
-    if (!bankAccountId) {
-      toast.error('يجب اختيار حساب بنكي لرفع إشعار الدفع')
-      return
-    }
 
     setUploading(true)
     try {
@@ -247,6 +135,38 @@ function PendingTasksContent() {
         data: { user },
       } = await supabase.auth.getUser()
       if (!user) throw new Error('Unauthorized')
+
+      if (uploadTarget.kind === 'transfer' && uploadTarget.payment_id) {
+        const proofUrl = await uploadPaymentProof(
+          supabase,
+          tenant.id,
+          `payment/${uploadTarget.payment_id}`,
+          file,
+        )
+        await attachProofToPayment(
+          supabase,
+          tenant.id,
+          uploadTarget.payment_id,
+          proofUrl,
+          user.id,
+        )
+        toast.success('تم رفع إثبات التحويل')
+        setUploadTarget(null)
+        await invalidateAll()
+        return
+      }
+
+      if (uploadTarget.kind !== 'task' || !uploadTarget.task_id) return
+
+      if (!uploadTarget.customer_id) {
+        toast.error('رفع إشعار الدفع متاح فقط لمهام المشتركين')
+        return
+      }
+
+      if (!bankAccountId) {
+        toast.error('يجب اختيار حساب بنكي لرفع إشعار الدفع')
+        return
+      }
 
       let paymentId = uploadTarget.related_payment_id
 
@@ -256,7 +176,7 @@ function PendingTasksContent() {
           .insert({
             tenant_id: tenant.id,
             customer_id: uploadTarget.customer_id,
-            amount: uploadTarget.amount ?? 0,
+            amount: uploadTarget.amount,
             method: 'bank',
             bank_account_id: bankAccountId,
           })
@@ -269,63 +189,48 @@ function PendingTasksContent() {
         const { error: linkErr } = await supabase
           .from('pending_tasks')
           .update({ related_payment_id: paymentId })
-          .eq('id', uploadTarget.id)
+          .eq('id', uploadTarget.task_id)
 
         if (linkErr) throw linkErr
       }
 
-      const ext = file.name.split('.').pop() ?? 'jpg'
-      const path = `${tenant.id}/${uploadTarget.id}/${Date.now()}.${ext}`
-
-      const { error: storageErr } = await supabase.storage
-        .from('payment_proofs')
-        .upload(path, file, { upsert: false })
-
-      if (storageErr) throw storageErr
-
-      const { data: urlData } = supabase.storage
-        .from('payment_proofs')
-        .getPublicUrl(path)
-
-      const { error: proofErr } = await supabase.from('payment_proofs').insert({
-        tenant_id: tenant.id,
-        payment_id: paymentId,
-        proof_url: urlData.publicUrl,
-        uploaded_by: user.id,
-      })
-
-      if (proofErr) throw proofErr
+      const proofUrl = await uploadPaymentProof(
+        supabase,
+        tenant.id,
+        uploadTarget.task_id,
+        file,
+      )
+      await attachProofToPayment(supabase, tenant.id, paymentId, proofUrl, user.id)
 
       toast.success('تم رفع إشعار الدفع')
       setUploadTarget(null)
       setBankAccountId(null)
-      invalidateAll()
+      await invalidateAll()
     } catch {
-      toast.error('فشل رفع إشعار الدفع. يرجى المحاولة مرة أخرى.')
+      toast.error('فشل رفع الإثبات. يرجى المحاولة مرة أخرى.')
     } finally {
       setUploading(false)
     }
   }
 
-  const handleConfirm = async (task: EnrichedTask) => {
-    if (task.status === 'completed' || task.status === 'converted_to_debt') return
-    if (!task.has_proof) {
+  const handleConfirmTask = async (item: PendingInboxItem) => {
+    if (item.kind !== 'task' || !item.task_id) return
+    if (item.requires_payment_proof && !item.has_proof) {
       toast.error('يجب رفع إشعار الدفع قبل التأكيد')
       return
     }
 
-    setConfirmingId(task.id)
+    setConfirmingId(item.task_id)
     try {
       const { error } = await supabase
         .from('pending_tasks')
         .update({ status: 'completed' })
-        .eq('id', task.id)
+        .eq('id', item.task_id)
         .in('status', ['pending', 'reminded'])
 
       if (error) throw error
-
-      toast.success('تم تأكيد المهمة')
-      invalidateAll()
+      toast.success(item.requires_payment_proof ? 'تم تأكيد المهمة' : 'تم إنجاز المهمة')
+      await invalidateAll()
     } catch {
       toast.error('فشل التأكيد. يرجى المحاولة مرة أخرى.')
     } finally {
@@ -333,16 +238,17 @@ function PendingTasksContent() {
     }
   }
 
-  const virtualItems = virtualizer.getVirtualItems()
-  const totalSize = virtualizer.getTotalSize()
-  const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0
-  const paddingBottom =
-    virtualItems.length > 0
-      ? totalSize - virtualItems[virtualItems.length - 1].end
-      : 0
-
-  const canAct = (status: TaskStatus) =>
-    status === 'pending' || status === 'reminded'
+  const openDebtSettle = (item: PendingInboxItem) => {
+    if (item.kind !== 'debt' || !item.debt_id) return
+    setDebtTarget({
+      id: item.debt_id,
+      customer_id: item.customer_id,
+      remaining_amount: item.amount,
+      reason: item.reason ?? null,
+      subscription_period_id: item.subscription_period_id ?? null,
+      customer_name: item.customer_name,
+    })
+  }
 
   return (
     <div dir="rtl" className="space-y-4">
@@ -350,19 +256,26 @@ function PendingTasksContent() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">المهام المعلقة</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {filtered.length.toLocaleString('ar-EG')} مهمة
-            {hasNextPage ? ' (المزيد متاح)' : ''}
+            {filtered.length.toLocaleString('ar-EG')} بند يحتاج متابعة — مهام، ديون، وتحويلات
+            بانتظار الإثبات
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void refetch()}
-          className="gap-1.5"
-        >
-          <RefreshCw size={14} />
-          تحديث
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            className="gap-1.5"
+          >
+            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+            تحديث
+          </Button>
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
+            <Plus size={14} />
+            إضافة مهمة
+          </Button>
+        </div>
       </div>
 
       <div className="relative max-w-md">
@@ -373,46 +286,44 @@ function PendingTasksContent() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="بحث بالعميل أو الهاتف…"
+          placeholder="بحث بالموضوع أو الهاتف…"
           className="pr-9"
           dir="rtl"
         />
       </div>
 
       <FilterGroup
-        label="الحالة"
+        label="النوع"
         options={[
-          ['all', 'الكل'],
-          ['pending', 'معلّقة'],
-          ['reminded', 'تم التذكير'],
-          ['converted_to_debt', 'تحوّلت لدين'],
-          ['completed', 'مكتملة'],
+          ['all', `الكل (${counts.all})`],
+          ['task', `مهام (${counts.task})`],
+          ['debt', `ديون (${counts.debt})`],
+          ['transfer', `تحويلات (${counts.transfer})`],
         ]}
-        value={statusFilter}
-        onChange={(v) => setStatusFilter(v as StatusFilter)}
+        value={kindFilter}
+        onChange={(v) => setKindFilter(v as KindFilter)}
       />
 
-      <div
-        ref={containerRef}
-        className="overflow-auto border border-gray-200 rounded-lg bg-white"
-        style={{ height: 'calc(100vh - 320px)', minHeight: 360 }}
-      >
+      <div className="overflow-auto border border-gray-200 rounded-lg bg-white max-h-[480px]">
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
             <tr>
               <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                العميل
+                الموضوع
+              </th>
+              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
+                النوع
               </th>
               <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
                 المبلغ
               </th>
               <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                الاستحقاق
+                التاريخ / الاستحقاق
               </th>
               <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
                 الحالة
               </th>
-              <th className="px-3 py-2.5 text-center font-semibold text-gray-700 border-b w-52">
+              <th className="px-3 py-2.5 text-center font-semibold text-gray-700 border-b w-56">
                 إجراءات
               </th>
             </tr>
@@ -420,7 +331,7 @@ function PendingTasksContent() {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={5} className="py-12 text-center text-muted-foreground">
+                <td colSpan={6} className="py-12 text-center text-muted-foreground">
                   جارٍ التحميل…
                 </td>
               </tr>
@@ -428,53 +339,92 @@ function PendingTasksContent() {
 
             {!isLoading && filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-12 text-center text-muted-foreground">
-                  لا توجد مهام مطابقة
+                <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                  <p>لا توجد بنود تحتاج متابعة حالياً</p>
+                  <p className="text-xs mt-2">
+                    تظهر هنا: مهام «إشعار لاحقاً»، ديون غير مسدّدة، وتحويلات بدون إثبات
+                  </p>
                 </td>
               </tr>
             )}
 
-            {paddingTop > 0 && (
-              <tr aria-hidden>
-                <td style={{ height: paddingTop }} colSpan={5} />
-              </tr>
-            )}
-
-            {virtualItems.map((vItem) => {
-              const row = filtered[vItem.index]
-              if (!row) return null
-              return (
-                <tr
-                  key={row.id}
-                  style={{ height: vItem.size }}
-                  className="hover:bg-mash-page border-b border-gray-100"
-                >
-                  <td className="px-3 py-2">
-                    <div className="font-medium">{row.customer_name}</div>
-                    {row.phone && (
-                      <div className="text-xs text-muted-foreground tabular-nums">
-                        {row.phone}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {row.amount != null
-                      ? `${Number(row.amount).toLocaleString('ar-EG')} ج.م`
-                      : '—'}
-                  </td>
-                  <td className="px-3 py-2">{formatDateTime(row.due_at)}</td>
-                  <td className="px-3 py-2">
-                    <Badge variant={STATUS_VARIANT[row.status]}>
-                      {STATUS_LABELS[row.status]}
+            {filtered.map((row) => (
+              <tr key={row.id} className="hover:bg-mash-page border-b border-gray-100">
+                <td className="px-3 py-2">
+                  {row.customer_id ? (
+                    <Link
+                      href={`/subscriptions/customer/${row.customer_id}`}
+                      className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                    >
+                      {row.customer_name}
+                      <ExternalLink size={12} className="opacity-60" />
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{row.customer_name}</span>
+                  )}
+                  {row.phone && (
+                    <div className="text-xs text-muted-foreground tabular-nums">{row.phone}</div>
+                  )}
+                  {row.task_notes && row.kind === 'task' && (
+                    <div className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                      {row.task_notes}
+                    </div>
+                  )}
+                  {row.reason && row.kind !== 'task' && (
+                    <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                      {row.reason}
+                    </div>
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  <Badge variant="outline" className="text-xs font-normal">
+                    {inboxKindLabel(row.kind)}
+                  </Badge>
+                  {row.kind === 'task' && row.task_scope && (
+                    <Badge variant="secondary" className="text-[10px] font-normal mr-1 mt-1">
+                      {TASK_SCOPE_LABELS[row.task_scope]}
                     </Badge>
-                    {row.has_proof && (
-                      <span className="mr-1 text-xs text-green-600">• إشعار مرفوع</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center justify-center gap-1">
-                      {canAct(row.status) && (
-                        <>
+                  )}
+                  {row.kind === 'transfer' && row.method && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {inboxMethodLabel(row.method)}
+                    </p>
+                  )}
+                </td>
+                <td className="px-3 py-2 tabular-nums font-medium">
+                  {row.amount > 0 ? formatMoney(row.amount) : '—'}
+                </td>
+                <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                  {row.kind === 'task' && row.due_at ? (
+                    <>
+                      <span className="block text-foreground">استحقاق: {formatDateTime(row.due_at)}</span>
+                    </>
+                  ) : (
+                    formatDateTime(row.recorded_at)
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  <Badge
+                    variant={
+                      row.kind === 'debt'
+                        ? 'destructive'
+                        : row.kind === 'transfer'
+                          ? 'secondary'
+                          : 'outline'
+                    }
+                    className="text-xs"
+                  >
+                    {row.status_label}
+                  </Badge>
+                  {row.has_proof && (
+                    <span className="mr-1 text-xs text-green-600">• إثبات مرفوع</span>
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center justify-center gap-1 flex-wrap">
+                    {row.kind === 'task' && (
+                      <>
+                        {row.requires_payment_proof && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -487,39 +437,65 @@ function PendingTasksContent() {
                             <Upload size={12} />
                             رفع إشعار
                           </Button>
+                        )}
+                        {row.requires_payment_proof ? (
                           <PermissionGuard permission="confirm_payments">
                             <Button
                               variant="default"
                               size="sm"
                               className="h-7 px-2 text-xs gap-1"
-                              disabled={!row.has_proof || confirmingId === row.id}
-                              onClick={() => void handleConfirm(row)}
+                              disabled={!row.has_proof || confirmingId === row.task_id}
+                              onClick={() => void handleConfirmTask(row)}
                             >
                               <CheckCircle2 size={12} />
-                              {confirmingId === row.id ? '…' : 'تأكيد'}
+                              {confirmingId === row.task_id ? '…' : 'تأكيد'}
                             </Button>
                           </PermissionGuard>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
+                        ) : (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-7 px-2 text-xs gap-1"
+                            disabled={confirmingId === row.task_id}
+                            onClick={() => void handleConfirmTask(row)}
+                          >
+                            <CheckCircle2 size={12} />
+                            {confirmingId === row.task_id ? '…' : 'إنجاز'}
+                          </Button>
+                        )}
+                      </>
+                    )}
 
-            {paddingBottom > 0 && (
-              <tr aria-hidden>
-                <td style={{ height: paddingBottom }} colSpan={5} />
-              </tr>
-            )}
+                    {row.kind === 'debt' && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="h-7 px-2 text-xs gap-1"
+                        onClick={() => openDebtSettle(row)}
+                      >
+                        <Wallet size={12} />
+                        تسديد
+                      </Button>
+                    )}
 
-            {isFetchingNextPage && (
-              <tr>
-                <td colSpan={5} className="py-3 text-center text-xs text-muted-foreground">
-                  جارٍ تحميل المزيد…
+                    {row.kind === 'transfer' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs gap-1"
+                        onClick={() => {
+                          setUploadTarget(row)
+                          setBankAccountId(null)
+                        }}
+                      >
+                        <Upload size={12} />
+                        رفع إثبات
+                      </Button>
+                    )}
+                  </div>
                 </td>
               </tr>
-            )}
+            ))}
           </tbody>
         </table>
       </div>
@@ -535,21 +511,27 @@ function PendingTasksContent() {
       >
         <DialogContent dir="rtl" className="max-w-md">
           <DialogHeader>
-            <DialogTitle>رفع إشعار الدفع</DialogTitle>
+            <DialogTitle>
+              {uploadTarget?.kind === 'transfer' ? 'رفع إثبات التحويل' : 'رفع إشعار الدفع'}
+            </DialogTitle>
           </DialogHeader>
           {uploadTarget && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                {uploadTarget.customer_name} —{' '}
-                {uploadTarget.amount != null
-                  ? `${Number(uploadTarget.amount).toLocaleString('ar-EG')} ج.م`
-                  : '—'}
+                {uploadTarget.customer_name} — {formatMoney(uploadTarget.amount)}
               </p>
-              <AccountSelector
-                value={bankAccountId}
-                onChange={setBankAccountId}
-                disabled={uploading}
-              />
+              {uploadTarget.kind === 'task' && (
+                <AccountSelector
+                  value={bankAccountId}
+                  onChange={setBankAccountId}
+                  disabled={uploading || !!uploadTarget.related_payment_id}
+                />
+              )}
+              {uploadTarget.kind === 'transfer' && uploadTarget.source_account_label && (
+                <p className="text-xs text-muted-foreground">
+                  الحساب الصادر: {uploadTarget.source_account_label}
+                </p>
+              )}
               <Input
                 type="file"
                 accept="image/*"
@@ -576,6 +558,19 @@ function PendingTasksContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SettleCustomerDebtModal
+        open={!!debtTarget}
+        debt={debtTarget}
+        onClose={() => setDebtTarget(null)}
+        onSuccess={() => void invalidateAll()}
+      />
+
+      <CreatePendingTaskModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSuccess={() => void invalidateAll()}
+      />
     </div>
   )
 }

@@ -3,19 +3,28 @@
 import { use, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
-import { ArrowRight, Plus } from 'lucide-react'
+import { ArrowRight, Plus, Wallet } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { useTenant } from '@/hooks/useTenant'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { DataPanel } from '@/components/shared/DataPanel'
 import { SellToDistributorModal } from '@/components/card-sales/SellToDistributorModal'
+import { SettleDistributorDebtModal } from '@/components/debts/SettleDistributorDebtModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { formatMoney } from '@/lib/format-money'
 
 interface SaleRow {
   id: string
   total_amount: number | null
   payment_method: string | null
+  proof_url: string | null
+  created_at: string
+}
+
+interface ReceiptRow {
+  id: string
+  amount: number
+  method: string
   proof_url: string | null
   created_at: string
 }
@@ -45,8 +54,8 @@ export default function DistributorDetailPage({
 }) {
   const { id } = use(params)
   const supabase = createClient()
-  const { data: tenant } = useTenant()
   const [saleOpen, setSaleOpen] = useState(false)
+  const [settleOpen, setSettleOpen] = useState(false)
 
   const { data: distributor, refetch: refetchDist } = useQuery({
     queryKey: ['distributor', id],
@@ -78,6 +87,21 @@ export default function DistributorDetailPage({
     enabled: !!id,
   })
 
+  const { data: receipts = [], refetch: refetchReceipts } = useQuery<ReceiptRow[]>({
+    queryKey: ['distributor-receipts', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('distributor_payment_receipts')
+        .select('id, amount, method, proof_url, created_at')
+        .eq('distributor_id', id)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data ?? []
+    },
+    enabled: !!id,
+  })
+
   if (!distributor) {
     return (
       <p className="text-center text-muted-foreground py-16" dir="rtl">
@@ -100,10 +124,18 @@ export default function DistributorDetailPage({
         title={distributor.name}
         description={distributor.phone ?? 'بدون هاتف'}
         actions={
-          <Button className="gap-1.5" onClick={() => setSaleOpen(true)}>
-            <Plus size={16} />
-            بيع دفعة
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {Number(distributor.balance_due) > 0 && (
+              <Button variant="outline" className="gap-1.5" onClick={() => setSettleOpen(true)}>
+                <Wallet size={16} />
+                تسديد
+              </Button>
+            )}
+            <Button className="gap-1.5" onClick={() => setSaleOpen(true)}>
+              <Plus size={16} />
+              بيع دفعة
+            </Button>
+          </div>
         }
       />
 
@@ -111,7 +143,7 @@ export default function DistributorDetailPage({
         <DataPanel className="p-4">
           <p className="text-sm text-muted-foreground">الرصيد المستحق</p>
           <p className="text-2xl font-bold tabular-nums text-primary mt-1">
-            {Number(distributor.balance_due).toLocaleString('ar-EG')} ج.م
+            {formatMoney(distributor.balance_due)}
           </p>
         </DataPanel>
         <DataPanel className="p-4">
@@ -131,7 +163,7 @@ export default function DistributorDetailPage({
                 <li key={sale.id} className="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="font-medium tabular-nums">
-                      {Number(sale.total_amount ?? 0).toLocaleString('ar-EG')} ج.م
+                      {formatMoney(sale.total_amount)}
                     </p>
                     <p className="text-xs text-muted-foreground">{formatDate(sale.created_at)}</p>
                   </div>
@@ -159,6 +191,50 @@ export default function DistributorDetailPage({
         </DataPanel>
       </div>
 
+      <div>
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">سجل الاستلام</h2>
+        <DataPanel noPadding>
+          {receipts.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              لا توجد دفعات مستلمة بعد
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {receipts.map((receipt) => (
+                <li
+                  key={receipt.id}
+                  className="px-4 py-3 flex flex-wrap items-center justify-between gap-2"
+                >
+                  <div>
+                    <p className="font-medium tabular-nums text-emerald-700">
+                      +{formatMoney(receipt.amount)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(receipt.created_at)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">
+                      {METHOD_LABELS[receipt.method] ?? receipt.method}
+                    </Badge>
+                    {receipt.proof_url && (
+                      <a
+                        href={receipt.proof_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline"
+                      >
+                        إشعار الدفع
+                      </a>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DataPanel>
+      </div>
+
       <SellToDistributorModal
         open={saleOpen}
         preselectedDistributorId={id}
@@ -167,6 +243,24 @@ export default function DistributorDetailPage({
           void refetchDist()
           void refetchSales()
         }}
+      />
+
+      <SettleDistributorDebtModal
+        open={settleOpen}
+        onClose={() => setSettleOpen(false)}
+        onSuccess={() => {
+          void refetchDist()
+          void refetchReceipts()
+        }}
+        distributor={
+          distributor
+            ? {
+                id: distributor.id,
+                name: distributor.name,
+                balance_due: Number(distributor.balance_due),
+              }
+            : null
+        }
       />
     </div>
   )

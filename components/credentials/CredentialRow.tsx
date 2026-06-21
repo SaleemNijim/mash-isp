@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { Eye, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { usePermissions } from '@/hooks/usePermissions'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import { Button } from '@/components/ui/button'
 
@@ -32,45 +33,49 @@ function credentialStatus(row: CredentialListItem): {
 
 function PasswordCell({ credentialId }: { credentialId: string }) {
   const supabase = createClient()
-  const [visible, setVisible] = useState(false)
+  const hasPermission = usePermissions((s) => s.hasPermission)
+  const canView = hasPermission('view_full_password')
   const [password, setPassword] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
-  async function handleReveal() {
-    setLoading(true)
-    try {
-      const { data, error } = await supabase.rpc('reveal_credential_password', {
-        p_credential_id: credentialId,
-      })
-      if (error) throw error
-      setPassword(data ?? '')
-      setVisible(true)
-    } finally {
+  useEffect(() => {
+    if (!canView) {
       setLoading(false)
+      return
     }
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc('reveal_credential_password', {
+          p_credential_id: credentialId,
+        })
+        if (error) throw error
+        if (!cancelled) setPassword(data ?? '')
+      } catch {
+        if (!cancelled) setPassword(null)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [credentialId, canView, supabase])
+
+  if (!canView) {
+    return <span className="text-muted-foreground">—</span>
+  }
+
+  if (loading) {
+    return <span className="font-mono text-muted-foreground">…</span>
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="font-mono text-muted-foreground">
-        {visible && password !== null ? password : '••••'}
-      </span>
-      <PermissionGuard permission="view_full_password">
-        {!visible && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs gap-1"
-            disabled={loading}
-            onClick={() => void handleReveal()}
-          >
-            <Eye size={12} />
-            {loading ? '…' : 'إظهار'}
-          </Button>
-        )}
-      </PermissionGuard>
-    </div>
+    <span className="font-mono text-gray-900" dir="ltr">
+      {password?.trim() || '—'}
+    </span>
   )
 }
 

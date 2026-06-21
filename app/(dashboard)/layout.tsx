@@ -27,6 +27,7 @@ import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
+import { fetchPendingInbox } from '@/lib/pending-tasks/inbox'
 import { initSyncEngine, runSyncEngine } from '@/lib/sync/engine'
 
 const NAV_ICONS: Record<DashboardNavIcon, LucideIcon> = {
@@ -89,15 +90,11 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
   const supabase = createClient()
   const { data: pendingCount } = useQuery({
-    queryKey: ['pending-tasks-count', tenant?.id],
+    queryKey: ['pending-inbox-count', tenant?.id],
     queryFn: async () => {
       if (!tenant?.id) return 0
-      const { count } = await supabase
-        .from('pending_tasks')
-        .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', tenant.id)
-        .in('status', ['pending', 'reminded'])
-      return count ?? 0
+      const items = await fetchPendingInbox(supabase, tenant.id)
+      return items.length
     },
     enabled: !!tenant?.id && !isCashier,
     refetchInterval: 60_000,

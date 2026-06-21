@@ -12,6 +12,7 @@ export const ROUTES = {
   subscriptions: '/subscriptions',
   distributors: '/distributors',
   debts: '/debts',
+  cardInventory: '/card-inventory',
   cardBatches: '/card-batches',
   cardProducts: '/card-products',
   cardSales: '/card-sales',
@@ -44,6 +45,7 @@ export const EMPLOYEE_ALLOWED_PREFIXES = [
   '/distributors',
   '/debts',
   '/messages',
+  '/card-inventory',
 ] as const
 
 export type DashboardNavIcon =
@@ -78,9 +80,9 @@ export type DashboardNavItem = {
 export const CASHIER_NAV: DashboardNavItem[] = [
   { href: ROUTES.sales, label: 'المبيعات', icon: 'ShoppingCart', available: true },
   {
-    href: ROUTES.subscriptions,
-    label: 'الاشتراكات',
-    icon: 'Wifi',
+    href: ROUTES.customers,
+    label: 'المشتركون',
+    icon: 'Users',
     available: true,
     permission: 'renew_subscriptions',
   },
@@ -92,7 +94,13 @@ export const CASHIER_NAV: DashboardNavItem[] = [
     permission: 'sell_cards',
   },
   { href: ROUTES.debts, label: 'سجل الدائنين', icon: 'DollarSign', available: true },
-  { href: ROUTES.messages, label: 'الرسائل', icon: 'Mail', available: true },
+  {
+    href: ROUTES.cardInventory,
+    label: 'مخزون البطاقات',
+    icon: 'CreditCard',
+    available: true,
+    permission: 'manage_card_inventory',
+  },
   {
     href: ROUTES.networkRouters,
     label: 'الشبكة',
@@ -106,17 +114,19 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
   { href: ROUTES.dashboard, label: 'الرئيسية', icon: 'LayoutDashboard', available: true },
   { href: ROUTES.sales, label: 'المبيعات', icon: 'ShoppingCart', available: true },
   { href: ROUTES.customers, label: 'المشتركون', icon: 'Users', available: true },
-  { href: ROUTES.subscriptions, label: 'الاشتراكات', icon: 'Wifi', available: true },
   { href: ROUTES.distributors, label: 'الموزعون', icon: 'Truck', available: true },
   { href: ROUTES.debts, label: 'سجل الدائنين', icon: 'DollarSign', available: true },
-  { href: ROUTES.messages, label: 'الرسائل', icon: 'Mail', available: true },
   { href: ROUTES.credentials, label: 'كريدنشال', icon: 'KeyRound', available: true },
-  { href: ROUTES.cardProducts, label: 'منتجات البطاقات', icon: 'CreditCard', available: true },
-  { href: ROUTES.cardBatches, label: 'دفعات البطاقات', icon: 'CreditCard', available: true },
+  {
+    href: ROUTES.cardInventory,
+    label: 'مخزون البطاقات',
+    icon: 'CreditCard',
+    available: true,
+    permission: 'manage_card_inventory',
+  },
   { href: ROUTES.bankAccounts, label: 'الحسابات البنكية', icon: 'Landmark', available: true },
   { href: ROUTES.warehouse, label: 'المستودع', icon: 'Package', available: true },
   { href: ROUTES.networkRouters, label: 'الشبكة', icon: 'Network', available: true },
-  { href: ROUTES.payments, label: 'المدفوعات', icon: 'DollarSign', available: true },
   {
     href: ROUTES.pendingTasks,
     label: 'المهام المعلقة',
@@ -138,8 +148,21 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
 export function isDashboardNavActive(pathname: string, href: string): boolean {
   if (pathname === href) return true
   if (href === ROUTES.dashboard) return false
+  if (href === ROUTES.customers) {
+    return (
+      pathname.startsWith('/customers') ||
+      pathname.startsWith('/subscriptions')
+    )
+  }
   if (href === ROUTES.networkRouters) return pathname.startsWith('/network')
   if (href === ROUTES.distributors) return pathname.startsWith('/distributors')
+  if (href === ROUTES.cardInventory) {
+    return (
+      pathname.startsWith('/card-inventory') ||
+      pathname.startsWith('/card-products') ||
+      pathname.startsWith('/card-batches')
+    )
+  }
   return pathname.startsWith(href + '/')
 }
 

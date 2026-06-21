@@ -1,9 +1,9 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Wallet, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -11,6 +11,15 @@ import { DataPanel } from '@/components/shared/DataPanel'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { formatMoney } from '@/lib/format-money'
+import {
+  SettleCustomerDebtModal,
+  type CustomerDebtTarget,
+} from '@/components/debts/SettleCustomerDebtModal'
+import {
+  SettleDistributorDebtModal,
+  type DistributorDebtTarget,
+} from '@/components/debts/SettleDistributorDebtModal'
 
 interface CustomerDebt {
   id: string
@@ -20,6 +29,7 @@ interface CustomerDebt {
   status: string
   reason: string | null
   created_at: string
+  subscription_period_id: string | null
   customers: { name: string; phone: string | null } | null
 }
 
@@ -41,14 +51,24 @@ export default function DebtsPage() {
   const supabase = createClient()
   const { data: tenant } = useTenant()
 
-  const { data: customerDebts = [], isLoading, refetch } = useQuery<CustomerDebt[]>({
+  const [customerSettleTarget, setCustomerSettleTarget] = useState<CustomerDebtTarget | null>(
+    null,
+  )
+  const [distributorSettleTarget, setDistributorSettleTarget] =
+    useState<DistributorDebtTarget | null>(null)
+
+  const {
+    data: customerDebts = [],
+    isLoading,
+    refetch: refetchCustomers,
+  } = useQuery<CustomerDebt[]>({
     queryKey: ['debts-customers', tenant?.id],
     queryFn: async () => {
       if (!tenant?.id) return []
       const { data, error } = await supabase
         .from('debts')
         .select(
-          'id, customer_id, original_amount, remaining_amount, status, reason, created_at, customers(name, phone)',
+          'id, customer_id, original_amount, remaining_amount, status, reason, created_at, subscription_period_id, customers(name, phone)',
         )
         .eq('tenant_id', tenant.id)
         .eq('is_deleted', false)
@@ -67,7 +87,9 @@ export default function DebtsPage() {
     enabled: !!tenant?.id,
   })
 
-  const { data: distributorDebts = [] } = useQuery<DistributorDebt[]>({
+  const { data: distributorDebts = [], refetch: refetchDistributors } = useQuery<
+    DistributorDebt[]
+  >({
     queryKey: ['debts-distributors', tenant?.id],
     queryFn: async () => {
       if (!tenant?.id) return []
@@ -98,13 +120,41 @@ export default function DebtsPage() {
     [distributorDebts],
   )
 
+  function openCustomerSettle(d: CustomerDebt) {
+    const remaining = Number(d.remaining_amount ?? d.original_amount)
+    setCustomerSettleTarget({
+      id: d.id,
+      customer_id: d.customer_id,
+      remaining_amount: remaining,
+      reason: d.reason,
+      subscription_period_id: d.subscription_period_id,
+      customer_name: d.customers?.name ?? '—',
+    })
+  }
+
+  function openDistributorSettle(d: DistributorDebt) {
+    setDistributorSettleTarget({
+      id: d.id,
+      name: d.name,
+      balance_due: Number(d.balance_due),
+    })
+  }
+
   return (
     <div dir="rtl" className="space-y-6">
       <PageHeader
         title="سجل الدائنين"
         description="مستحقات المشتركين والموزعين — من لم يُسدّد بعد"
         actions={
-          <Button variant="outline" size="sm" onClick={() => void refetch()} className="gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void refetchCustomers()
+              void refetchDistributors()
+            }}
+            className="gap-1.5"
+          >
             <RefreshCw size={14} />
             تحديث
           </Button>
@@ -114,15 +164,11 @@ export default function DebtsPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         <DataPanel className="p-4">
           <p className="text-sm text-muted-foreground">ديون مشتركين</p>
-          <p className="text-2xl font-bold tabular-nums mt-1">
-            {customerTotal.toLocaleString('ar-EG')} ج.م
-          </p>
+          <p className="text-2xl font-bold tabular-nums mt-1">{formatMoney(customerTotal)}</p>
         </DataPanel>
         <DataPanel className="p-4">
           <p className="text-sm text-muted-foreground">مستحقات موزعين</p>
-          <p className="text-2xl font-bold tabular-nums mt-1">
-            {distributorTotal.toLocaleString('ar-EG')} ج.م
-          </p>
+          <p className="text-2xl font-bold tabular-nums mt-1">{formatMoney(distributorTotal)}</p>
         </DataPanel>
       </div>
 
@@ -148,28 +194,57 @@ export default function DebtsPage() {
                     <th className="px-4 py-2.5 text-right font-semibold">المبلغ</th>
                     <th className="px-4 py-2.5 text-right font-semibold">الحالة</th>
                     <th className="px-4 py-2.5 text-right font-semibold">السبب</th>
+                    <th className="px-4 py-2.5 text-right font-semibold w-44">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {customerDebts.map((d) => (
-                    <tr key={d.id} className="hover:bg-muted/20">
-                      <td className="px-4 py-2.5">
-                        <p className="font-medium">{d.customers?.name ?? '—'}</p>
-                        {d.customers?.phone && (
-                          <p className="text-xs text-muted-foreground">{d.customers.phone}</p>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 tabular-nums font-medium">
-                        {Number(d.remaining_amount ?? d.original_amount).toLocaleString('ar-EG')} ج.م
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Badge variant="secondary">{STATUS_LABELS[d.status] ?? d.status}</Badge>
-                      </td>
-                      <td className="px-4 py-2.5 text-muted-foreground text-xs">
-                        {d.reason ?? '—'}
-                      </td>
-                    </tr>
-                  ))}
+                  {customerDebts.map((d) => {
+                    const remaining = Number(d.remaining_amount ?? d.original_amount)
+                    return (
+                      <tr key={d.id} className="hover:bg-muted/20">
+                        <td className="px-4 py-2.5">
+                          <p className="font-medium">{d.customers?.name ?? '—'}</p>
+                          {d.customers?.phone && (
+                            <p className="text-xs text-muted-foreground">{d.customers.phone}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 tabular-nums font-medium">
+                          {formatMoney(remaining)}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <Badge variant="secondary">{STATUS_LABELS[d.status] ?? d.status}</Badge>
+                        </td>
+                        <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                          {d.reason ?? '—'}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 gap-1 text-xs"
+                              onClick={() => openCustomerSettle(d)}
+                            >
+                              <Wallet size={12} />
+                              تسديد
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1 text-xs"
+                              asChild
+                            >
+                              <Link href={`/subscriptions/customer/${d.customer_id}`}>
+                                <ExternalLink size={12} />
+                                السجل
+                              </Link>
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             )}
@@ -183,30 +258,73 @@ export default function DebtsPage() {
                 لا مستحقات على الموزعين
               </p>
             ) : (
-              <ul className="divide-y divide-border">
-                {distributorDebts.map((d) => (
-                  <li key={d.id}>
-                    <Link
-                      href={`/distributors/${d.id}`}
-                      className="flex items-center justify-between px-4 py-3 hover:bg-muted/20"
-                    >
-                      <div>
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 border-b border-border">
+                  <tr>
+                    <th className="px-4 py-2.5 text-right font-semibold">الموزع</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">المستحق</th>
+                    <th className="px-4 py-2.5 text-right font-semibold w-44">إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {distributorDebts.map((d) => (
+                    <tr key={d.id} className="hover:bg-muted/20">
+                      <td className="px-4 py-2.5">
                         <p className="font-medium">{d.name}</p>
                         {d.phone && (
                           <p className="text-xs text-muted-foreground">{d.phone}</p>
                         )}
-                      </div>
-                      <span className="font-semibold tabular-nums text-amber-700">
-                        {Number(d.balance_due).toLocaleString('ar-EG')} ج.م
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+                      </td>
+                      <td className="px-4 py-2.5 tabular-nums font-semibold text-amber-700">
+                        {formatMoney(d.balance_due)}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
+                            onClick={() => openDistributorSettle(d)}
+                          >
+                            <Wallet size={12} />
+                            تسديد
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
+                            asChild
+                          >
+                            <Link href={`/distributors/${d.id}`}>
+                              <ExternalLink size={12} />
+                              السجل
+                            </Link>
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </DataPanel>
         </TabsContent>
       </Tabs>
+
+      <SettleCustomerDebtModal
+        open={!!customerSettleTarget}
+        onClose={() => setCustomerSettleTarget(null)}
+        onSuccess={() => void refetchCustomers()}
+        debt={customerSettleTarget}
+      />
+
+      <SettleDistributorDebtModal
+        open={!!distributorSettleTarget}
+        onClose={() => setDistributorSettleTarget(null)}
+        onSuccess={() => void refetchDistributors()}
+        distributor={distributorSettleTarget}
+      />
     </div>
   )
 }

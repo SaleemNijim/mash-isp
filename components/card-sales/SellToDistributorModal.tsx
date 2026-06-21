@@ -6,12 +6,16 @@ import { toast } from 'sonner'
 import { Plus, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
-import { AccountSelector } from '@/components/subscriptions/AccountSelector'
-import { PaymentProofUpload } from '@/components/shared/PaymentProofUpload'
+import { PaymentMethodPicker } from '@/components/payments/PaymentMethodPicker'
+import { PaymentDetailsSection } from '@/components/payments/PaymentDetailsSection'
+import { uploadPaymentProof } from '@/lib/payment-proof'
 import {
-  uploadPaymentProof,
-  requiresPaymentProof,
-} from '@/lib/payment-proof'
+  isBankPayment,
+  parsePaymentMethodValue,
+  toDbPaymentMethod,
+  validatePaymentForm,
+  type PaymentMethodValue,
+} from '@/lib/payments/payment-selection'
 import {
   Dialog,
   DialogContent,
@@ -22,6 +26,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CardPriceBreakdown } from '@/components/cards/CardPriceBreakdown'
+import { formatMoney } from '@/lib/format-money'
 import {
   Select,
   SelectContent,
@@ -50,8 +56,6 @@ interface SaleItemLine {
   unit_price: string
 }
 
-type PayMethod = 'cash' | 'debt' | 'reflect' | 'jawwal_pay' | 'bank'
-
 interface SellToDistributorModalProps {
   open: boolean
   onClose: () => void
@@ -79,8 +83,9 @@ export function SellToDistributorModal({
 
   const [distributorId, setDistributorId] = useState('')
   const [commissionPercent, setCommissionPercent] = useState('0')
-  const [paymentMethod, setPaymentMethod] = useState<PayMethod>('cash')
-  const [bankAccountId, setBankAccountId] = useState<string | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodValue>('cash')
+  const [sourceAccountLabel, setSourceAccountLabel] = useState('')
+  const [attachProof, setAttachProof] = useState(false)
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [itemLines, setItemLines] = useState<SaleItemLine[]>([newSaleLine()])
   const [loading, setLoading] = useState(false)
@@ -90,7 +95,8 @@ export function SellToDistributorModal({
     setDistributorId(preselectedDistributorId ?? '')
     setCommissionPercent('0')
     setPaymentMethod('cash')
-    setBankAccountId(null)
+    setSourceAccountLabel('')
+    setAttachProof(false)
     setProofFile(null)
     setItemLines([newSaleLine()])
   }, [open, preselectedDistributorId])
@@ -152,8 +158,7 @@ export function SellToDistributorModal({
     [lineSubtotals],
   )
 
-  const needsBank = requiresPaymentProof(paymentMethod)
-  const needsProof = requiresPaymentProof(paymentMethod)
+  const needsBank = isBankPayment(paymentMethod)
 
   const handleProductChange = (key: string, productId: string) => {
     const product = productMap.get(productId)
@@ -185,16 +190,18 @@ export function SellToDistributorModal({
       return
     }
 
-    if (needsBank && !bankAccountId) {
-      toast.error('الدفع عبر التطبيق يتطلب اختيار حساب بنكي')
+    const validationError = validatePaymentForm({
+      method: paymentMethod,
+      sourceAccountLabel,
+      attachProof,
+      proofFile,
+    })
+    if (validationError) {
+      toast.error(validationError)
       return
     }
 
-    if (needsProof && !proofFile) {
-      toast.error('يجب إرفاق إشعار الدفع')
-      return
-    }
-
+    const parsed = parsePaymentMethodValue(paymentMethod)
     const validItems = itemLines
       .filter((l) => l.product_id && l.quantity.trim())
       .map((l) => ({
@@ -223,7 +230,7 @@ export function SellToDistributorModal({
     setLoading(true)
     try {
       let proofUrl: string | null = null
-      if (needsProof && proofFile) {
+      if (attachProof && proofFile) {
         proofUrl = await uploadPaymentProof(
           supabase,
           tenant.id,
@@ -235,11 +242,12 @@ export function SellToDistributorModal({
       const { error } = await supabase.rpc('sell_cards', {
         p_distributor_id: distributorId,
         p_commission_percent: commission,
-        p_payment_method: paymentMethod,
-        p_bank_account_id: needsBank ? bankAccountId : null,
+        p_payment_method: toDbPaymentMethod(paymentMethod),
+        p_bank_account_id: parsed.bankAccountId,
         p_proof_url: proofUrl,
         p_items: validItems,
         p_nonce: crypto.randomUUID(),
+        p_source_account_label: sourceAccountLabel.trim() || null,
       })
       if (error) throw error
 
@@ -320,41 +328,31 @@ export function SellToDistributorModal({
                 className="text-right"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>طريقة الدفع</Label>
-              <Select
-                value={paymentMethod}
-                onValueChange={(v) => setPaymentMethod(v as PayMethod)}
-                disabled={loading}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">نقدي</SelectItem>
-                  <SelectItem value="debt">على الحساب (دين)</SelectItem>
-                  <SelectItem value="reflect">Reflect</SelectItem>
-                  <SelectItem value="jawwal_pay">Jawwal Pay</SelectItem>
-                  <SelectItem value="bank">تحويل بنكي</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
-          {needsBank && (
-            <AccountSelector
-              value={bankAccountId}
-              onChange={setBankAccountId}
-              disabled={loading}
-            />
-          )}
+          <PaymentMethodPicker
+            value={paymentMethod}
+            onChange={(v) => {
+              setPaymentMethod(v)
+              if (!isBankPayment(v)) {
+                setSourceAccountLabel('')
+                setAttachProof(false)
+                setProofFile(null)
+              }
+            }}
+            disabled={loading}
+          />
 
-          {needsProof && (
-            <PaymentProofUpload
-              file={proofFile}
-              onChange={setProofFile}
+          {needsBank && (
+            <PaymentDetailsSection
+              method={paymentMethod}
+              sourceAccountLabel={sourceAccountLabel}
+              onSourceAccountLabelChange={setSourceAccountLabel}
+              attachProof={attachProof}
+              onAttachProofChange={setAttachProof}
+              proofFile={proofFile}
+              onProofFileChange={setProofFile}
               disabled={loading}
-              required
             />
           )}
 
@@ -374,7 +372,7 @@ export function SellToDistributorModal({
               </Button>
             </div>
             <div className="space-y-2 rounded-lg border border-border p-3">
-              {itemLines.map((line, idx) => (
+              {itemLines.map((line) => (
                 <div
                   key={line.key}
                   className="grid gap-2 sm:grid-cols-[1fr_80px_90px_auto] items-end"
@@ -438,14 +436,22 @@ export function SellToDistributorModal({
                   >
                     <Trash2 size={14} />
                   </Button>
-                  {idx === 0 && (
-                    <p className="sm:col-span-4 text-xs text-muted-foreground">
-                      الإجمالي: {totalAmount.toLocaleString('ar-EG')} ج.م
-                    </p>
-                  )}
+                  <div className="sm:col-span-4">
+                    <CardPriceBreakdown
+                      listPrice={productMap.get(line.product_id)?.sale_price}
+                      unitPrice={line.unit_price}
+                      quantity={line.quantity || '1'}
+                      compact
+                    />
+                  </div>
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="rounded-md bg-muted/50 px-3 py-2 text-sm tabular-nums">
+            إجمالي العملية:{' '}
+            <span className="font-semibold">{formatMoney(totalAmount)}</span>
           </div>
         </div>
 

@@ -44,7 +44,7 @@ describe('STATIC_ROUTE_MANIFEST', () => {
       '/register',
       '/dashboard',
       '/subscriptions',
-      '/card-batches',
+      '/card-inventory',
       '/super-admin/tenants',
       '/super-admin/plans',
       '/super-admin/invoices',

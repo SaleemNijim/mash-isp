@@ -17,6 +17,7 @@ import {
   ArrowUpFromLine,
   AlertTriangle,
   Wrench,
+  Plus,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useInfiniteVirtualData } from '@/hooks/useInfiniteVirtualData'
@@ -27,6 +28,12 @@ import {
   type WarehouseItemTarget,
   type WarehouseMovementType,
 } from '@/components/warehouse/MovementModal'
+import { CreateWarehouseItemModal } from '@/components/warehouse/CreateWarehouseItemModal'
+import {
+  formatWarehouseQuantity,
+  WAREHOUSE_UNIT_LABELS,
+  type WarehouseUnit,
+} from '@/lib/warehouse/units'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -37,6 +44,8 @@ interface WarehouseItem {
   tenant_id: string
   name: string
   category: string | null
+  unit: WarehouseUnit
+  notes: string | null
   quantity: number
   min_quantity: number
   is_deleted: boolean
@@ -51,17 +60,18 @@ interface WarehouseMovement {
   quantity: number
   notes: string | null
   created_at: string
-  warehouse_items: { name: string } | null
+  warehouse_items: { name: string; unit: WarehouseUnit } | null
 }
 
 function normalizeMovement(row: Record<string, unknown>): WarehouseMovement {
   const items = row.warehouse_items
-  const normalized =
-    Array.isArray(items) ? (items[0] as { name: string } | undefined) ?? null : items
+  const normalized = Array.isArray(items)
+    ? (items[0] as { name: string; unit: WarehouseUnit } | undefined) ?? null
+    : items
   const base = row as unknown as WarehouseMovement
   return {
     ...base,
-    warehouse_items: normalized as { name: string } | null,
+    warehouse_items: normalized as { name: string; unit: WarehouseUnit } | null,
   }
 }
 
@@ -117,6 +127,7 @@ function WarehouseContent() {
   const [movementFilter, setMovementFilter] = useState<MovementFilter>('all')
 
   const [movementOpen, setMovementOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const [movementItem, setMovementItem] = useState<WarehouseItemTarget | null>(null)
   const [movementType, setMovementType] = useState<WarehouseMovementType | null>(null)
 
@@ -137,7 +148,7 @@ function WarehouseContent() {
       let q = supabase
         .from('warehouse_movements')
         .select(
-          'id, tenant_id, item_id, movement_type, quantity, notes, created_at, warehouse_items(name)',
+          'id, tenant_id, item_id, movement_type, quantity, notes, created_at, warehouse_items(name, unit)',
           { count: 'exact' },
         )
         .eq('is_deleted', false)
@@ -224,6 +235,8 @@ function WarehouseContent() {
       id: item.id,
       name: item.name,
       quantity: item.quantity ?? 0,
+      unit: item.unit ?? 'piece',
+      notes: item.notes,
     })
     setMovementType(type)
     setMovementOpen(true)
@@ -255,15 +268,21 @@ function WarehouseContent() {
             إدارة الأصناف وحركات الاستلام والإخراج
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => invalidateAll()}
-          className="gap-1.5"
-        >
-          <RefreshCw size={14} />
-          تحديث
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
+            <Plus size={14} />
+            صنف جديد
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => invalidateAll()}
+            className="gap-1.5"
+          >
+            <RefreshCw size={14} />
+            تحديث
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -312,6 +331,9 @@ function WarehouseContent() {
                     التصنيف
                   </th>
                   <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
+                    الوحدة
+                  </th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
                     الكمية
                   </th>
                   <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
@@ -325,7 +347,7 @@ function WarehouseContent() {
               <tbody>
                 {itemsLoading && (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={6} className="py-12 text-center text-muted-foreground">
                       جارٍ التحميل…
                     </td>
                   </tr>
@@ -333,21 +355,29 @@ function WarehouseContent() {
 
                 {!itemsLoading && items.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-muted-foreground">
-                      لا توجد أصناف
+                    <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                      <p>لا توجد أصناف</p>
+                      <Button
+                        variant="link"
+                        className="mt-2"
+                        onClick={() => setCreateOpen(true)}
+                      >
+                        إضافة أول صنف
+                      </Button>
                     </td>
                   </tr>
                 )}
 
                 {itemsPaddingTop > 0 && (
                   <tr aria-hidden>
-                    <td style={{ height: itemsPaddingTop }} colSpan={5} />
+                    <td style={{ height: itemsPaddingTop }} colSpan={6} />
                   </tr>
                 )}
 
                 {itemsVirtualItems.map((vItem) => {
                   const row = items[vItem.index]
                   if (!row) return null
+                  const unit = row.unit ?? 'piece'
                   const lowStock = (row.quantity ?? 0) <= (row.min_quantity ?? 0)
                   return (
                     <tr
@@ -376,15 +406,20 @@ function WarehouseContent() {
                       <td className="px-3 py-2 text-muted-foreground">
                         {row.category?.trim() || '—'}
                       </td>
+                      <td className="px-3 py-2">
+                        <Badge variant="outline" className="text-xs">
+                          {WAREHOUSE_UNIT_LABELS[unit]}
+                        </Badge>
+                      </td>
                       <td
                         className={`px-3 py-2 tabular-nums font-medium ${
                           lowStock ? 'text-red-700' : ''
                         }`}
                       >
-                        {(row.quantity ?? 0).toLocaleString('ar-EG')}
+                        {formatWarehouseQuantity(row.quantity, unit)}
                       </td>
                       <td className="px-3 py-2 tabular-nums text-muted-foreground">
-                        {(row.min_quantity ?? 0).toLocaleString('ar-EG')}
+                        {formatWarehouseQuantity(row.min_quantity, unit)}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap items-center justify-center gap-1">
@@ -432,13 +467,13 @@ function WarehouseContent() {
 
                 {itemsPaddingBottom > 0 && (
                   <tr aria-hidden>
-                    <td style={{ height: itemsPaddingBottom }} colSpan={5} />
+                    <td style={{ height: itemsPaddingBottom }} colSpan={6} />
                   </tr>
                 )}
 
                 {itemsFetchingMore && (
                   <tr>
-                    <td colSpan={5} className="py-3 text-center text-xs text-muted-foreground">
+                    <td colSpan={6} className="py-3 text-center text-xs text-muted-foreground">
                       جارٍ تحميل المزيد…
                     </td>
                   </tr>
@@ -526,7 +561,11 @@ function WarehouseContent() {
                         <MovementBadge type={row.movement_type} />
                       </td>
                       <td className="px-3 py-2 tabular-nums">
-                        {row.quantity.toLocaleString('ar-EG')}
+                        {formatWarehouseQuantity(
+                          row.quantity,
+                          row.warehouse_items?.unit ?? 'piece',
+                        )}{' '}
+                        {WAREHOUSE_UNIT_LABELS[row.warehouse_items?.unit ?? 'piece']}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground max-w-[200px] truncate">
                         {row.notes?.trim() || '—'}
@@ -553,6 +592,12 @@ function WarehouseContent() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <CreateWarehouseItemModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSuccess={invalidateAll}
+      />
 
       <MovementModal
         open={movementOpen}

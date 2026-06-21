@@ -8,7 +8,7 @@ import { useTenant } from '@/hooks/useTenant'
 import { usePermissions } from '@/hooks/usePermissions'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { DataPanel } from '@/components/shared/DataPanel'
-import { NewSaleModal, type SaleOperationType } from '@/components/sales/NewSaleModal'
+import { NewSaleModal, type SaleSelection } from '@/components/sales/NewSaleModal'
 import { RetailCardSaleModal } from '@/components/sales/RetailCardSaleModal'
 import { SellToDistributorModal } from '@/components/card-sales/SellToDistributorModal'
 import { SubscriptionPickModal } from '@/components/sales/SubscriptionPickModal'
@@ -20,6 +20,7 @@ interface TodaySaleRow {
   kind: 'retail' | 'distributor' | 'renewal'
   label: string
   amount: number
+  discountPercent?: number | null
   created_at: string
 }
 
@@ -44,7 +45,9 @@ export default function SalesPage() {
   const userName = role === 'employee' ? 'كاشير' : 'مبيعات'
 
   const [newSaleOpen, setNewSaleOpen] = useState(false)
-  const [retailType, setRetailType] = useState<'daily' | 'monthly' | null>(null)
+  const [retailSale, setRetailSale] = useState<Extract<SaleSelection, { type: 'retail' }> | null>(
+    null,
+  )
   const [distributorOpen, setDistributorOpen] = useState(false)
   const [renewalOpen, setRenewalOpen] = useState(false)
 
@@ -58,7 +61,7 @@ export default function SalesPage() {
       const [retailRes, distRes, payRes] = await Promise.all([
         supabase
           .from('card_retail_sales')
-          .select('id, total_amount, sale_type, created_at, card_products(name)')
+          .select('id, total_amount, sale_type, discount_percent, created_at, card_products(name)')
           .eq('tenant_id', tenant.id)
           .eq('is_deleted', false)
           .gte('created_at', todayStart)
@@ -87,8 +90,9 @@ export default function SalesPage() {
         rows.push({
           id: r.id,
           kind: 'retail',
-          label: `${r.sale_type === 'daily' ? 'بطاقة يومية' : 'بطاقة شهرية'} — ${product?.name ?? ''}`,
+          label: product?.name ? `بطاقة — ${product.name}` : 'بيع بطاقة',
           amount: Number(r.total_amount),
+          discountPercent: r.discount_percent != null ? Number(r.discount_percent) : null,
           created_at: r.created_at,
         })
       }
@@ -130,11 +134,10 @@ export default function SalesPage() {
     [todaySales],
   )
 
-  function handleSaleSelect(type: SaleOperationType) {
-    if (type === 'daily') setRetailType('daily')
-    else if (type === 'monthly') setRetailType('monthly')
-    else if (type === 'distributor') setDistributorOpen(true)
-    else if (type === 'renewal') setRenewalOpen(true)
+  function handleSaleSelect(selection: SaleSelection) {
+    if (selection.type === 'retail') setRetailSale(selection)
+    else if (selection.type === 'distributor') setDistributorOpen(true)
+    else if (selection.type === 'renewal') setRenewalOpen(true)
   }
 
   function handleSuccess() {
@@ -213,6 +216,11 @@ export default function SalesPage() {
                     <p className="text-sm font-medium tabular-nums">
                       {sale.amount.toLocaleString('ar-EG')} ج.م
                     </p>
+                    {sale.discountPercent != null && sale.discountPercent > 0 && (
+                      <p className="text-xs text-emerald-700 tabular-nums">
+                        خصم {sale.discountPercent.toLocaleString('ar-EG')}%
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">{formatTime(sale.created_at)}</p>
                   </div>
                 </li>
@@ -229,9 +237,11 @@ export default function SalesPage() {
       />
 
       <RetailCardSaleModal
-        open={retailType !== null}
-        saleType={retailType ?? 'daily'}
-        onClose={() => setRetailType(null)}
+        open={retailSale !== null}
+        productId={retailSale?.productId ?? ''}
+        productName={retailSale?.productName ?? ''}
+        cardType={retailSale?.cardType ?? null}
+        onClose={() => setRetailSale(null)}
         onSuccess={handleSuccess}
       />
 

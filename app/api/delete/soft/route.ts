@@ -16,6 +16,7 @@ const SOFT_DELETE_WHITELIST = [
   'payments',
   'debts',
   'pending_tasks',
+  'subscription_periods',
   'network_routers',
   'network_ports',
 ] as const

@@ -18,6 +18,10 @@ import { useDeleteConfirm } from '@/hooks/useDeleteConfirm'
 import { useTenant } from '@/hooks/useTenant'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import { DeleteConfirmModal } from '@/components/shared/DeleteConfirmModal'
+import { BankAccountLedgerPanel } from '@/components/bank-accounts/BankAccountLedgerPanel'
+import { DataPanel } from '@/components/shared/DataPanel'
+import { fetchFinancialOverview } from '@/lib/payments/account-ledger'
+import { formatMoney } from '@/lib/format-money'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,7 +32,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-
 interface BankAccount {
   id: string
   tenant_id: string
@@ -75,11 +78,6 @@ function formFromAccount(a: BankAccount): AccountForm {
   }
 }
 
-function formatMoney(n: number | null | undefined): string {
-  if (n == null) return '—'
-  return `${Number(n).toLocaleString('ar-EG')} ج.م`
-}
-
 export default function BankAccountsPage() {
   return (
     <PermissionGuard
@@ -101,6 +99,7 @@ function BankAccountsContent() {
   const queryClient = useQueryClient()
   const containerRef = useRef<HTMLDivElement>(null)
   const { data: tenant } = useTenant()
+  const [ledgerAccount, setLedgerAccount] = useState<BankAccount | null>(null)
 
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search, 300)
@@ -154,6 +153,15 @@ function BankAccountsContent() {
     enabled: accountIds.length > 0,
   })
 
+  const { data: overview, refetch: refetchOverview } = useQuery({
+    queryKey: ['financial-overview', tenant?.id],
+    queryFn: async () => {
+      if (!tenant?.id) return null
+      return fetchFinancialOverview(supabase, tenant.id)
+    },
+    enabled: !!tenant?.id,
+  })
+
   const virtualizer = useVirtualizer({
     count: accounts.length,
     getScrollElement: () => containerRef.current,
@@ -177,9 +185,11 @@ function BankAccountsContent() {
 
   const invalidateAll = () => {
     void refetch()
+    void refetchOverview()
     void queryClient.invalidateQueries({ queryKey: ['company_bank_accounts'] })
     void queryClient.invalidateQueries({ queryKey: ['bank-accounts-active'] })
     void queryClient.invalidateQueries({ queryKey: ['bank-account-payment-totals'] })
+    void queryClient.invalidateQueries({ queryKey: ['financial-overview'] })
   }
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -282,11 +292,25 @@ function BankAccountsContent() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">الحسابات البنكية</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {accounts.length.toLocaleString('ar-EG')} حساب — إجمالي المدفوعات الإلكترونية:{' '}
-            <strong>{formatMoney(grandTotal)}</strong>
+            {accounts.length.toLocaleString('ar-EG')} حساب — إجمالي التحويلات البنكية:{' '}
+            <strong>{formatMoney(overview?.bankInflowTotal ?? grandTotal)}</strong>
+            {' — '}
+            <span className="text-xs">اضغط على أي حساب لعرض تحويلاته</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void refetch()
+              void refetchOverview()
+            }}
+            className="gap-1.5"
+          >
+            <RefreshCw size={14} />
+            تحديث
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -296,17 +320,31 @@ function BankAccountsContent() {
             <Plus size={14} />
             حساب جديد
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void refetch()}
-            className="gap-1.5"
-          >
-            <RefreshCw size={14} />
-            تحديث
-          </Button>
         </div>
       </div>
+
+      {overview && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <DataPanel className="p-4">
+            <p className="text-sm text-muted-foreground">إجمالي النقدي</p>
+            <p className="text-2xl font-bold tabular-nums mt-1 text-emerald-700">
+              {formatMoney(overview.cashTotal)}
+            </p>
+          </DataPanel>
+          <DataPanel className="p-4">
+            <p className="text-sm text-muted-foreground">إجمالي الديون (مشتركون + موزعون)</p>
+            <p className="text-2xl font-bold tabular-nums mt-1 text-destructive">
+              {formatMoney(overview.debtTotal)}
+            </p>
+          </DataPanel>
+          <DataPanel className="p-4">
+            <p className="text-sm text-muted-foreground">تحويلات بنكية مسجّلة</p>
+            <p className="text-2xl font-bold tabular-nums mt-1">
+              {formatMoney(overview.bankInflowTotal)}
+            </p>
+          </DataPanel>
+        </div>
+      )}
 
       {showAddForm && (
         <form
@@ -384,8 +422,7 @@ function BankAccountsContent() {
 
       <div
         ref={containerRef}
-        className="overflow-auto border border-gray-200 rounded-lg bg-white"
-        style={{ height: 'calc(100vh - 320px)', minHeight: 360 }}
+        className="overflow-auto border border-gray-200 rounded-lg bg-white max-h-[360px]"
       >
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
@@ -437,13 +474,19 @@ function BankAccountsContent() {
               const row = accounts[vItem.index]
               if (!row) return null
               const computedTotal = paymentTotals[row.id] ?? 0
+              const isSelected = ledgerAccount?.id === row.id
               return (
                 <tr
                   key={row.id}
                   style={{ height: vItem.size }}
-                  className="hover:bg-mash-page border-b border-gray-100"
+                  className={`hover:bg-mash-page border-b border-gray-100 cursor-pointer ${
+                    isSelected ? 'bg-primary/5 ring-1 ring-inset ring-primary/20' : ''
+                  }`}
+                  onClick={() =>
+                    setLedgerAccount((prev) => (prev?.id === row.id ? null : row))
+                  }
                 >
-                  <td className="px-3 py-2 font-medium">{row.bank_name}</td>
+                  <td className="px-3 py-2 font-medium text-primary">{row.bank_name}</td>
                   <td className="px-3 py-2">{row.account_name ?? '—'}</td>
                   <td className="px-3 py-2 tabular-nums text-left" dir="ltr">
                     {row.account_number ?? '—'}
@@ -454,7 +497,7 @@ function BankAccountsContent() {
                   <td className="px-3 py-2 tabular-nums text-muted-foreground">
                     {formatMoney(row.current_total)}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-center gap-1">
                       <Button
                         variant="ghost"
@@ -502,6 +545,14 @@ function BankAccountsContent() {
           </tbody>
         </table>
       </div>
+
+      {ledgerAccount && (
+        <BankAccountLedgerPanel
+          account={ledgerAccount}
+          ledger={overview?.ledger ?? []}
+          onClose={() => setLedgerAccount(null)}
+        />
+      )}
 
       <Dialog
         open={!!editTarget}
