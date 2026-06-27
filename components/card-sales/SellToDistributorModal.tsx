@@ -16,6 +16,8 @@ import {
   validatePaymentForm,
   type PaymentMethodValue,
 } from '@/lib/payments/payment-selection'
+import { calcDistributorLineBreakdown } from '@/lib/card-sales/distributor-commission'
+import { distributorUnitPrice } from '@/lib/cards/types'
 import {
   Dialog,
   DialogContent,
@@ -26,7 +28,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CardPriceBreakdown } from '@/components/cards/CardPriceBreakdown'
 import { formatMoney } from '@/lib/format-money'
 import {
   Select,
@@ -40,6 +41,7 @@ interface ProductOption {
   id: string
   name: string
   sale_price: number | null
+  distributor_price: number | null
   quantity_in_stock: number
 }
 
@@ -52,7 +54,7 @@ interface DistributorOption {
 interface SaleItemLine {
   key: string
   product_id: string
-  quantity: string
+  line_amount: string
   unit_price: string
 }
 
@@ -67,7 +69,7 @@ function newSaleLine(): SaleItemLine {
   return {
     key: crypto.randomUUID(),
     product_id: '',
-    quantity: '',
+    line_amount: '',
     unit_price: '',
   }
 }
@@ -128,7 +130,7 @@ export function SellToDistributorModal({
       if (!tenant?.id) return []
       const { data, error } = await supabase
         .from('card_products')
-        .select('id, name, sale_price, quantity_in_stock')
+        .select('id, name, sale_price, distributor_price, quantity_in_stock')
         .eq('tenant_id', tenant.id)
         .eq('is_deleted', false)
         .order('name')
@@ -144,18 +146,34 @@ export function SellToDistributorModal({
     return m
   }, [products])
 
-  const lineSubtotals = useMemo(() => {
+  const commission = useMemo(() => {
+    const n = commissionPercent.trim() ? Number(commissionPercent) : 0
+    return Number.isFinite(n) ? n : 0
+  }, [commissionPercent])
+
+  const lineBreakdowns = useMemo(() => {
     return itemLines.map((line) => {
-      const qty = Number(line.quantity)
-      const price = Number(line.unit_price)
-      if (!Number.isFinite(qty) || !Number.isFinite(price)) return 0
-      return qty * price
+      const amount = Number(line.line_amount)
+      const unitPrice = Number(line.unit_price)
+      if (!line.product_id || !Number.isFinite(amount) || !Number.isFinite(unitPrice)) {
+        return null
+      }
+      return calcDistributorLineBreakdown(amount, unitPrice, commission)
     })
-  }, [itemLines])
+  }, [itemLines, commission])
 
   const totalAmount = useMemo(
-    () => lineSubtotals.reduce((sum, n) => sum + n, 0),
-    [lineSubtotals],
+    () =>
+      itemLines.reduce((sum, line) => {
+        const amount = Number(line.line_amount)
+        return sum + (Number.isFinite(amount) ? amount : 0)
+      }, 0),
+    [itemLines],
+  )
+
+  const totalStockDeduction = useMemo(
+    () => lineBreakdowns.reduce((sum, b) => sum + (b?.stockQuantity ?? 0), 0),
+    [lineBreakdowns],
   )
 
   const needsBank = isBankPayment(paymentMethod)
@@ -168,8 +186,10 @@ export function SellToDistributorModal({
           ? {
               ...l,
               product_id: productId,
-              unit_price:
-                product?.sale_price != null ? String(product.sale_price) : l.unit_price,
+              unit_price: (() => {
+                const price = distributorUnitPrice(product ?? {})
+                return price != null ? String(price) : l.unit_price
+              })(),
             }
           : l,
       ),
@@ -202,29 +222,52 @@ export function SellToDistributorModal({
     }
 
     const parsed = parsePaymentMethodValue(paymentMethod)
-    const validItems = itemLines
-      .filter((l) => l.product_id && l.quantity.trim())
-      .map((l) => ({
-        product_id: l.product_id,
-        quantity: Number(l.quantity),
-        unit_price: Number(l.unit_price),
-      }))
+    const validItems: {
+      product_id: string
+      line_amount: number
+      unit_price: number
+    }[] = []
+
+    for (let i = 0; i < itemLines.length; i++) {
+      const line = itemLines[i]
+      if (!line.product_id || !line.line_amount.trim()) continue
+
+      const lineAmount = Number(line.line_amount)
+      const unitPrice = Number(line.unit_price)
+      const breakdown = lineBreakdowns[i]
+
+      if (!Number.isFinite(lineAmount) || lineAmount <= 0) {
+        toast.error('المبلغ غير صالح')
+        return
+      }
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+        toast.error('سعر البطاقة غير صالح')
+        return
+      }
+      if (!breakdown) {
+        toast.error('المبلغ لا يكفي لبطاقة واحدة على الأقل')
+        return
+      }
+
+      const stock = productMap.get(line.product_id)?.quantity_in_stock ?? 0
+      if (breakdown.stockQuantity > stock) {
+        const productName = productMap.get(line.product_id)?.name ?? 'المنتج'
+        toast.error(
+          `المخزون غير كافٍ لـ ${productName} — مطلوب ${breakdown.stockQuantity} (${breakdown.paidQuantity} مدفوع + ${breakdown.bonusQuantity} عمولة)`,
+        )
+        return
+      }
+
+      validItems.push({
+        product_id: line.product_id,
+        line_amount: lineAmount,
+        unit_price: unitPrice,
+      })
+    }
 
     if (validItems.length === 0) {
       toast.error('أضف صنفاً واحداً على الأقل')
       return
-    }
-
-    for (const item of validItems) {
-      if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-        toast.error('الكمية غير صالحة')
-        return
-      }
-      const stock = productMap.get(item.product_id)?.quantity_in_stock ?? 0
-      if (item.quantity > stock) {
-        toast.error('الكمية تتجاوز المخزون')
-        return
-      }
     }
 
     setLoading(true)
@@ -279,12 +322,21 @@ export function SellToDistributorModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !loading && !v && onClose()}>
-      <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        dir="rtl"
+        className="max-w-[calc(100%-2rem)] sm:max-w-2xl max-h-[90vh] overflow-x-hidden overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>بيع بطاقات لموزع</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+            أدخل <strong className="text-foreground">المبلغ المدفوع</strong> وسعر البطاقة — النظام
+            يحسب البطاقات المدفوعة ثم يضيف بطاقات العمولة ويخصم المجموع من المخزون.
+            مثال: 100 ج.م بسعر 2 وبعمولة 10% = 50 مدفوع + 5 عمولة = 55 من المخزون.
+          </div>
+
           <div className="space-y-1.5">
             <Label>الموزع *</Label>
             <Select
@@ -372,86 +424,127 @@ export function SellToDistributorModal({
               </Button>
             </div>
             <div className="space-y-2 rounded-lg border border-border p-3">
-              {itemLines.map((line) => (
-                <div
-                  key={line.key}
-                  className="grid gap-2 sm:grid-cols-[1fr_80px_90px_auto] items-end"
-                >
-                  <Select
-                    value={line.product_id}
-                    onValueChange={(v) => handleProductChange(line.key, v)}
-                    disabled={loading}
+              {itemLines.map((line, index) => {
+                const breakdown = lineBreakdowns[index]
+                const stock = line.product_id
+                  ? (productMap.get(line.product_id)?.quantity_in_stock ?? 0)
+                  : 0
+                const stockLow =
+                  breakdown != null && breakdown.stockQuantity > stock
+
+                return (
+                  <div
+                    key={line.key}
+                    className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_90px_90px_auto] items-end border-b border-border/60 pb-3 last:border-0 last:pb-0"
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="منتج" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} ({p.quantity_in_stock})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="كمية"
-                    value={line.quantity}
-                    onChange={(e) =>
-                      setItemLines((lines) =>
-                        lines.map((l) =>
-                          l.key === line.key ? { ...l, quantity: e.target.value } : l,
-                        ),
-                      )
-                    }
-                    disabled={loading}
-                    dir="ltr"
-                    className="text-right"
-                  />
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="سعر"
-                    value={line.unit_price}
-                    onChange={(e) =>
-                      setItemLines((lines) =>
-                        lines.map((l) =>
-                          l.key === line.key ? { ...l, unit_price: e.target.value } : l,
-                        ),
-                      )
-                    }
-                    disabled={loading}
-                    dir="ltr"
-                    className="text-right"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={loading || itemLines.length <= 1}
-                    onClick={() =>
-                      setItemLines((lines) => lines.filter((l) => l.key !== line.key))
-                    }
-                  >
-                    <Trash2 size={14} />
-                  </Button>
-                  <div className="sm:col-span-4">
-                    <CardPriceBreakdown
-                      listPrice={productMap.get(line.product_id)?.sale_price}
-                      unitPrice={line.unit_price}
-                      quantity={line.quantity || '1'}
-                      compact
+                    <Select
+                      value={line.product_id}
+                      onValueChange={(v) => handleProductChange(line.key, v)}
+                      disabled={loading}
+                    >
+                      <SelectTrigger className="w-full min-w-0">
+                        <SelectValue placeholder="منتج" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products.map((p) => {
+                          const distPrice = distributorUnitPrice(p)
+                          return (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name} (مخزون {p.quantity_in_stock}
+                              {distPrice != null
+                                ? ` · موزع ${distPrice.toLocaleString('ar-EG')}`
+                                : ''}
+                              {p.sale_price != null
+                                ? ` · تجزئة ${p.sale_price.toLocaleString('ar-EG')}`
+                                : ''}
+                              )
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="المبلغ"
+                      value={line.line_amount}
+                      onChange={(e) =>
+                        setItemLines((lines) =>
+                          lines.map((l) =>
+                            l.key === line.key ? { ...l, line_amount: e.target.value } : l,
+                          ),
+                        )
+                      }
+                      disabled={loading}
+                      dir="ltr"
+                      className="text-right"
                     />
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="سعر الموزع"
+                      value={line.unit_price}
+                      onChange={(e) =>
+                        setItemLines((lines) =>
+                          lines.map((l) =>
+                            l.key === line.key ? { ...l, unit_price: e.target.value } : l,
+                          ),
+                        )
+                      }
+                      disabled={loading}
+                      dir="ltr"
+                      className="text-right"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={loading || itemLines.length <= 1}
+                      onClick={() =>
+                        setItemLines((lines) => lines.filter((l) => l.key !== line.key))
+                      }
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                    {breakdown && (
+                      <div className="sm:col-span-4 text-xs">
+                        <p className="text-muted-foreground tabular-nums">
+                          مدفوع:{' '}
+                          <span className="font-medium text-foreground">
+                            {breakdown.paidQuantity}
+                          </span>
+                          {' · '}
+                          عمولة ({commission}%):{' '}
+                          <span className="font-medium text-foreground">
+                            {breakdown.bonusQuantity}
+                          </span>
+                          {' · '}
+                          يُخصم من المخزون:{' '}
+                          <span
+                            className={`font-semibold ${stockLow ? 'text-destructive' : 'text-foreground'}`}
+                          >
+                            {breakdown.stockQuantity}
+                          </span>
+                        </p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
-          <div className="rounded-md bg-muted/50 px-3 py-2 text-sm tabular-nums">
-            إجمالي العملية:{' '}
-            <span className="font-semibold">{formatMoney(totalAmount)}</span>
+          <div className="rounded-md bg-muted/50 px-3 py-2 text-sm space-y-1 tabular-nums">
+            <p>
+              إجمالي المبلغ المدفوع:{' '}
+              <span className="font-semibold">{formatMoney(totalAmount)}</span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              إجمالي البطاقات المخصومة من المخزون:{' '}
+              {totalStockDeduction.toLocaleString('ar-EG')}
+            </p>
           </div>
         </div>
 

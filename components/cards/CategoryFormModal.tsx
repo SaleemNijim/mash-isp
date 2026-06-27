@@ -69,6 +69,7 @@ export function CategoryFormModal({
           tenant_id: tenant.id,
           name: parsed.name,
           sale_price: parsed.sale_price,
+          distributor_price: parsed.distributor_price,
           min_quantity: parsed.min_quantity,
           attributes: parsed.attributes,
           card_type: 'other',
@@ -81,6 +82,7 @@ export function CategoryFormModal({
           .update({
             name: parsed.name,
             sale_price: parsed.sale_price,
+            distributor_price: parsed.distributor_price,
             min_quantity: parsed.min_quantity,
             attributes: parsed.attributes,
           })

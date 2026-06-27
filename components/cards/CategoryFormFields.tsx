@@ -29,8 +29,8 @@ export function CategoryFormFields({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="space-y-1.5 sm:col-span-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="space-y-1.5 sm:col-span-4">
           <Label>اسم الفئة</Label>
           <Input
             value={form.name}
@@ -41,7 +41,7 @@ export function CategoryFormFields({
           />
         </div>
         <div className="space-y-1.5">
-          <Label>سعر البيع</Label>
+          <Label>سعر التجزئة</Label>
           <Input
             type="number"
             min={0}
@@ -52,6 +52,21 @@ export function CategoryFormFields({
             dir="ltr"
             className="text-left tabular-nums"
           />
+          <p className="text-[11px] text-muted-foreground">بيع مباشر للمشترك</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label>سعر الموزع</Label>
+          <Input
+            type="number"
+            min={0}
+            step="0.01"
+            value={form.distributor_price}
+            onChange={(e) => set('distributor_price', e.target.value)}
+            disabled={disabled}
+            dir="ltr"
+            className="text-left tabular-nums"
+          />
+          <p className="text-[11px] text-muted-foreground">يُعبَّأ تلقائياً عند البيع للموزع</p>
         </div>
         <div className="space-y-1.5">
           <Label>الحد الأدنى للمخزون</Label>

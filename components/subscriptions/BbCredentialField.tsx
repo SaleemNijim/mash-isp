@@ -5,6 +5,9 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
+import { usePppPlans } from '@/hooks/usePppPlans'
+import { usePppPlanInventory } from '@/hooks/usePppPlanInventory'
+import { isPppPlanBelowMin } from '@/lib/ppp/plans'
 import type { BbCredentialInputMode } from '@/lib/subscriptions/resolve-bb-credential'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,6 +25,7 @@ interface BbCredential {
   id: string
   username: string
   password: string | null
+  plan_id: string | null
 }
 
 export interface BbCredentialFieldProps {
@@ -33,6 +37,8 @@ export interface BbCredentialFieldProps {
   manualPassword: string
   onManualUsernameChange: (value: string) => void
   onManualPasswordChange: (value: string) => void
+  /** باقة PPP — يُفلتر المخزون حسب السرعة */
+  planId: string | null
   disabled?: boolean
 }
 
@@ -45,21 +51,32 @@ export function BbCredentialField({
   manualPassword,
   onManualUsernameChange,
   onManualPasswordChange,
+  planId,
   disabled,
 }: BbCredentialFieldProps) {
   const supabase = createClient()
   const { data: tenant } = useTenant()
   const [inventoryOpen, setInventoryOpen] = useState(false)
 
+  const { data: plans = [] } = usePppPlans()
+  const { availableByPlan } = usePppPlanInventory()
+  const planMeta = planId ? plans.find((p) => p.id === planId) ?? null : null
+  const planAvailable = planId ? (availableByPlan[planId] ?? 0) : 0
+  const planLow =
+    planMeta &&
+    isPppPlanBelowMin(planAvailable, planMeta.min_available_usernames)
+
   const { data: bbCredentials = [], isLoading } = useQuery<BbCredential[]>({
-    queryKey: ['bb-credentials-with-passwords', tenant?.id],
+    queryKey: ['bb-credentials-with-passwords', tenant?.id, planId],
     queryFn: async () => {
       if (!tenant?.id) return []
-      const { data, error } = await supabase.rpc('list_available_bb_credentials')
+      const { data, error } = await supabase.rpc('list_available_bb_credentials', {
+        p_plan_id: planId,
+      })
       if (error) throw error
       return (data ?? []) as BbCredential[]
     },
-    enabled: !!tenant?.id,
+    enabled: !!tenant?.id && !!planId,
   })
 
   const selected = bbCredentials.find((c) => c.id === credentialId) ?? null
@@ -75,98 +92,112 @@ export function BbCredentialField({
       <div>
         <Label className="text-sm font-semibold">بيانات الدخول (BB) *</Label>
         <p className="text-xs text-muted-foreground mt-1">
-          اختر من المخزون أو أدخل username و password يدوياً — يُحجَز تلقائياً للعميل.
+          {planId
+            ? 'اختر username من مخزون الباقة المحددة — أو أدخل يدوياً.'
+            : 'اختر الباقة (السرعة) أولاً لعرض usernames المتاحة.'}
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label>{isManual ? 'Username (يدوي)' : 'Username من المخزون'}</Label>
-          {isManual ? (
+      {!planId ? (
+        <p className="text-xs text-amber-700">حدّد باقة PPP (السرعة) في القسم أعلاه.</p>
+      ) : (
+        <>
+          {planLow && planMeta && (
+            <p className="text-xs text-amber-700 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+              ⚠ مخزون منخفض: متبقٍ {planAvailable} username متاح (الحد{' '}
+              {planMeta.min_available_usernames})
+            </p>
+          )}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>{isManual ? 'Username (يدوي)' : 'Username من المخزون'}</Label>
+            {isManual ? (
+              <Input
+                value={manualUsername}
+                onChange={(e) => onManualUsernameChange(e.target.value)}
+                placeholder="user@provider"
+                disabled={disabled}
+                dir="ltr"
+                className="font-mono bg-background text-left"
+              />
+            ) : (
+              <Select
+                value={selectValue}
+                onValueChange={(v) => {
+                  if (v === MANUAL_ENTRY) {
+                    onModeChange('manual')
+                    onCredentialChange(null)
+                    return
+                  }
+                  onModeChange('inventory')
+                  onCredentialChange(v || null)
+                }}
+                disabled={disabled || isLoading}
+                open={inventoryOpen}
+                onOpenChange={setInventoryOpen}
+              >
+                <SelectTrigger className="w-full bg-background font-mono">
+                  <SelectValue
+                    placeholder={isLoading ? 'جارٍ التحميل…' : 'اختر username غير مستخدم'}
+                  />
+                </SelectTrigger>
+                <SelectContent dir="rtl" className="max-h-64">
+                  {bbCredentials.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      <span className="font-mono" dir="ltr">
+                        {c.username}
+                      </span>
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={MANUAL_ENTRY}>+ إدخال يدوي</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            {isManual && (
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline"
+                onClick={() => {
+                  onModeChange('inventory')
+                  onManualUsernameChange('')
+                  onManualPasswordChange('')
+                }}
+                disabled={disabled}
+              >
+                ← العودة للاختيار من المخزون
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Password</Label>
             <Input
-              value={manualUsername}
-              onChange={(e) => onManualUsernameChange(e.target.value)}
-              placeholder="user@provider"
+              value={isManual ? manualPassword : (selected?.password ?? '')}
+              onChange={(e) => {
+                if (isManual) onManualPasswordChange(e.target.value)
+              }}
+              readOnly={!isManual}
+              placeholder={
+                isManual
+                  ? 'كلمة المرور'
+                  : credentialId
+                    ? '—'
+                    : 'يظهر بعد اختيار username'
+              }
               disabled={disabled}
               dir="ltr"
               className="font-mono bg-background text-left"
             />
-          ) : (
-            <Select
-              value={selectValue}
-              onValueChange={(v) => {
-                if (v === MANUAL_ENTRY) {
-                  onModeChange('manual')
-                  onCredentialChange(null)
-                  return
-                }
-                onModeChange('inventory')
-                onCredentialChange(v || null)
-              }}
-              disabled={disabled || isLoading}
-              open={inventoryOpen}
-              onOpenChange={setInventoryOpen}
-            >
-              <SelectTrigger className="w-full bg-background font-mono">
-                <SelectValue
-                  placeholder={isLoading ? 'جارٍ التحميل…' : 'اختر username غير مستخدم'}
-                />
-              </SelectTrigger>
-              <SelectContent dir="rtl" className="max-h-64">
-                {bbCredentials.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    <span className="font-mono" dir="ltr">
-                      {c.username}
-                    </span>
-                  </SelectItem>
-                ))}
-                <SelectItem value={MANUAL_ENTRY}>+ إدخال يدوي</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          {isManual && (
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => {
-                onModeChange('inventory')
-                onManualUsernameChange('')
-                onManualPasswordChange('')
-              }}
-              disabled={disabled}
-            >
-              ← العودة للاختيار من المخزون
-            </button>
-          )}
+          </div>
         </div>
+        </>
+      )}
 
-        <div className="space-y-1.5">
-          <Label>Password</Label>
-          <Input
-            value={isManual ? manualPassword : (selected?.password ?? '')}
-            onChange={(e) => {
-              if (isManual) onManualPasswordChange(e.target.value)
-            }}
-            readOnly={!isManual}
-            placeholder={
-              isManual
-                ? 'كلمة المرور'
-                : credentialId
-                  ? '—'
-                  : 'يظهر بعد اختيار username'
-            }
-            disabled={disabled}
-            dir="ltr"
-            className="font-mono bg-background text-left"
-          />
-        </div>
-      </div>
-
-      {!isManual && bbCredentials.length === 0 && !isLoading && (
+      {planId && !isManual && bbCredentials.length === 0 && !isLoading && (
         <p className="text-xs text-amber-700">
-          لا يوجد username في المخزون — استخدم «+ إدخال يدوي» أو{' '}
+          لا يوجد username متاح لهذه الباقة — استخدم «+ إدخال يدوي» أو{' '}
           <Link href="/credentials" className="underline font-medium">
-            أضف كريدنشالات
+            أضف PPP
           </Link>
         </p>
       )}

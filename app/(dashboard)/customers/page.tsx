@@ -21,12 +21,16 @@ import {
   RotateCcw,
   Wifi,
   FileText,
+  Download,
+  Loader2,
 } from 'lucide-react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
+import { useTenant } from '@/hooks/useTenant'
 import { useCustomerHubData } from '@/hooks/useCustomerHubData'
-import { useDeleteConfirm } from '@/hooks/useDeleteConfirm'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
-import { DeleteConfirmModal } from '@/components/shared/DeleteConfirmModal'
+import { RecordDeleteOptionsModal } from '@/components/shared/RecordDeleteOptionsModal'
+import { deleteRecordWithMode } from '@/lib/delete/record-delete'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { DataPanel } from '@/components/shared/DataPanel'
 import {
@@ -43,6 +47,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { exportCustomersToExcel } from '@/lib/excel/export-customers'
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -62,6 +67,8 @@ interface HubRow extends CustomerRecord {
 }
 
 function CustomersHubContent() {
+  const supabase = createClient()
+  const { data: tenant } = useTenant()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -69,6 +76,7 @@ function CustomersHubContent() {
   const initialFilter = searchParams.get('filter')
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search, 300)
+  const [exporting, setExporting] = useState(false)
   const [statusFilter, setStatusFilter] = useState<HubStatusFilter>(() => {
     const valid: HubStatusFilter[] = [
       'all',
@@ -84,8 +92,7 @@ function CustomersHubContent() {
   })
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<CustomerRecord | null>(null)
-
-  const { open, target, openModal, closeModal } = useDeleteConfirm()
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
 
   const {
     customers,
@@ -167,17 +174,112 @@ function CustomersHubContent() {
     void queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
   }
 
-  const handleDeleteConfirm = async () => {
-    if (!target) return
-    const res = await fetch('/api/delete/soft', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ table: target.table, id: target.id }),
+  const handleDeleteConfirm = async (mode: 'keep_data' | 'with_data') => {
+    if (!deleteTarget) return
+    await deleteRecordWithMode({
+      table: 'customers',
+      id: deleteTarget.id,
+      mode,
+      supabase,
     })
-    if (!res.ok) throw new Error('delete_failed')
-    toast.success('تم الحذف بنجاح')
+    toast.success(
+      mode === 'keep_data'
+        ? 'تم إخفاء المشترك — يمكن استرجاعه من سلة المحذوفات'
+        : 'تم حذف المشترك وجميع بياناته نهائياً',
+    )
+    setDeleteTarget(null)
     invalidateHub()
   }
+
+  const handleExport = useCallback(async () => {
+    if (!tenant?.id) {
+      toast.error('تعذّر تحديد الشبكة')
+      return
+    }
+
+    setExporting(true)
+    try {
+      const [customersRes, subscriptionsRes, debtsRes] = await Promise.all([
+        supabase
+          .from('customers')
+          .select('id, name, phone, address, notes')
+          .eq('tenant_id', tenant.id)
+          .eq('is_deleted', false)
+          .order('name'),
+        supabase
+          .from('subscriptions')
+          .select('customer_id, speed, price, end_date')
+          .eq('tenant_id', tenant.id)
+          .eq('is_deleted', false)
+          .order('end_date', { ascending: false, nullsFirst: false }),
+        supabase
+          .from('debts')
+          .select('customer_id, remaining_amount')
+          .eq('tenant_id', tenant.id)
+          .eq('is_deleted', false)
+          .in('status', ['active', 'temporary']),
+      ])
+
+      if (customersRes.error) throw customersRes.error
+      if (subscriptionsRes.error) throw subscriptionsRes.error
+      if (debtsRes.error) throw debtsRes.error
+
+      const subscriptionByCustomer = new Map<
+        string,
+        { speed: string | null; price: number | null; end_date: string | null }
+      >()
+      for (const row of subscriptionsRes.data ?? []) {
+        if (!subscriptionByCustomer.has(row.customer_id)) {
+          subscriptionByCustomer.set(row.customer_id, {
+            speed: row.speed,
+            price: row.price != null ? Number(row.price) : null,
+            end_date: row.end_date,
+          })
+        }
+      }
+
+      const debtByCustomer = new Map<string, number>()
+      for (const row of debtsRes.data ?? []) {
+        const amount = Number(row.remaining_amount ?? 0)
+        if (amount <= 0) continue
+        debtByCustomer.set(
+          row.customer_id,
+          (debtByCustomer.get(row.customer_id) ?? 0) + amount,
+        )
+      }
+
+      const exportRows = (customersRes.data ?? []).map((customer) => {
+        const sub = subscriptionByCustomer.get(customer.id)
+        return {
+          name: customer.name,
+          phone: customer.phone,
+          address: customer.address,
+          notes: customer.notes,
+          speed: sub?.speed ?? null,
+          price: sub?.price ?? null,
+          endDate: sub?.end_date ?? null,
+          debtTotal: debtByCustomer.get(customer.id) ?? 0,
+        }
+      })
+
+      const result = await exportCustomersToExcel({
+        fileBaseName: tenant.name ? `${tenant.name}_المشتركون` : 'المشتركون',
+        customers: exportRows,
+      })
+
+      if (!result.saved) return
+
+      toast.success(
+        result.count > 0
+          ? `تم تصدير ${result.count.toLocaleString('ar-EG')} مشترك إلى Excel`
+          : 'لا يوجد مشتركون للتصدير',
+      )
+    } catch {
+      toast.error('فشل تصدير Excel')
+    } finally {
+      setExporting(false)
+    }
+  }, [supabase, tenant?.id, tenant?.name])
 
   const virtualItems = virtualizer.getVirtualItems()
   const totalSize = virtualizer.getTotalSize()
@@ -204,16 +306,32 @@ function CustomersHubContent() {
               تحديث
             </Button>
             <Button
+              variant="outline"
               size="sm"
               className="gap-1.5"
-              onClick={() => {
-                setEditTarget(null)
-                setFormOpen(true)
-              }}
+              disabled={exporting}
+              onClick={() => void handleExport()}
             >
-              <Plus size={14} />
-              إضافة مشترك
+              {exporting ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Download size={14} />
+              )}
+              تصدير Excel
             </Button>
+            <PermissionGuard permission="manage_customers">
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  setEditTarget(null)
+                  setFormOpen(true)
+                }}
+              >
+                <Plus size={14} />
+                إضافة مشترك
+              </Button>
+            </PermissionGuard>
           </>
         }
       />
@@ -254,22 +372,18 @@ function CustomersHubContent() {
           className="overflow-auto w-full"
           style={{ height: 'calc(100vh - 300px)', minHeight: 400 }}
         >
-          <table className="w-full min-w-[960px] text-sm border-collapse">
-            <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm border-b border-border">
+          <table className="mash-data-table min-w-[960px]">
+            <thead>
               <tr>
-                <th className="px-3 py-3 text-right font-semibold">المشترك</th>
-                <th className="px-3 py-3 text-right font-semibold">الهاتف</th>
-                <th className="px-3 py-3 text-right font-semibold hidden lg:table-cell">
-                  العنوان
-                </th>
-                <th className="px-3 py-3 text-right font-semibold">السرعة</th>
-                <th className="px-3 py-3 text-right font-semibold">السعر</th>
-                <th className="px-3 py-3 text-right font-semibold">ينتهي</th>
-                <th className="px-3 py-3 text-right font-semibold">الحالة</th>
-                <th className="px-3 py-3 text-right font-semibold">الدين</th>
-                <th className="px-3 py-3 text-center font-semibold w-[220px]">
-                  إجراءات
-                </th>
+                <th className="col-rtl">المشترك</th>
+                <th className="col-c col-mono col-phone">الهاتف</th>
+                <th className="col-rtl hidden lg:table-cell">العنوان</th>
+                <th className="col-rtl">السرعة</th>
+                <th className="col-c col-mono">السعر</th>
+                <th className="col-rtl">ينتهي</th>
+                <th className="col-rtl">الحالة</th>
+                <th className="col-c col-mono">الدين</th>
+                <th className="col-actions col-c">إجراءات</th>
               </tr>
             </thead>
             <tbody>
@@ -300,9 +414,9 @@ function CustomersHubContent() {
                   <tr
                     key={row.id}
                     style={{ height: vItem.size }}
-                    className="hover:bg-muted/30 border-b border-border/60 transition-colors"
+                    className="hover:bg-muted/30 transition-colors"
                   >
-                    <td className="px-3 py-2.5 font-medium">
+                    <td className="col-rtl font-medium">
                       <Link
                         href={`/subscriptions/customer/${row.id}`}
                         className="text-foreground hover:text-primary hover:underline"
@@ -310,23 +424,23 @@ function CustomersHubContent() {
                         {row.name}
                       </Link>
                     </td>
-                    <td className="px-3 py-2.5 text-muted-foreground tabular-nums font-mono text-xs">
+                    <td className="col-c col-mono col-phone text-muted-foreground">
                       {row.phone || '—'}
                     </td>
-                    <td className="px-3 py-2.5 text-muted-foreground truncate max-w-[140px] hidden lg:table-cell">
+                    <td className="col-rtl text-muted-foreground truncate hidden lg:table-cell">
                       {row.address || '—'}
                     </td>
-                    <td className="px-3 py-2.5">{row.speed ?? '—'}</td>
-                    <td className="px-3 py-2.5 tabular-nums">
+                    <td className="col-rtl">{row.speed ?? '—'}</td>
+                    <td className="col-c col-mono">
                       {row.price != null ? formatMoney(row.price) : '—'}
                     </td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">
+                    <td className="col-rtl whitespace-nowrap">
                       {formatHubDate(row.endDate)}
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="col-rtl">
                       <Badge variant={st.variant}>{st.label}</Badge>
                     </td>
-                    <td className="px-3 py-2.5 tabular-nums">
+                    <td className="col-c col-mono">
                       {row.debtTotal > 0 ? (
                         <Link
                           href="/debts"
@@ -339,7 +453,7 @@ function CustomersHubContent() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="col-actions col-c">
                       <div className="flex items-center justify-center gap-1 flex-wrap">
                         <Button
                           variant="outline"
@@ -353,19 +467,7 @@ function CustomersHubContent() {
                             سجل
                           </Link>
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs gap-1"
-                          asChild
-                          title="اشتراك PPP جديد"
-                        >
-                          <Link href={`/subscriptions/new?customer=${row.id}`}>
-                            <Wifi size={12} />
-                            اشتراك
-                          </Link>
-                        </Button>
-                        {row.subscriptionId && (
+                        {row.subscriptionId ? (
                           <PermissionGuard permission="renew_subscriptions">
                             <Button
                               variant="default"
@@ -380,32 +482,43 @@ function CustomersHubContent() {
                               </Link>
                             </Button>
                           </PermissionGuard>
+                        ) : (
+                          <PermissionGuard permission="create_subscriptions">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 text-xs gap-1"
+                              asChild
+                              title="اشتراك PPP جديد"
+                            >
+                              <Link href={`/subscriptions/new?customer=${row.id}`}>
+                                <Wifi size={12} />
+                                اشتراك
+                              </Link>
+                            </Button>
+                          </PermissionGuard>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={() => {
-                            setEditTarget(row)
-                            setFormOpen(true)
-                          }}
-                          title="تعديل بيانات المشترك"
-                        >
-                          <Pencil size={12} />
-                        </Button>
+                        <PermissionGuard permission="manage_customers">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => {
+                              setEditTarget(row)
+                              setFormOpen(true)
+                            }}
+                            title="تعديل بيانات المشترك"
+                          >
+                            <Pencil size={12} />
+                          </Button>
+                        </PermissionGuard>
                         <PermissionGuard permission="delete_records">
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-7 w-7 p-0 text-destructive"
                             onClick={() =>
-                              openModal({
-                                id: row.id,
-                                table: 'customers',
-                                name: row.name,
-                                consequences:
-                                  'سيتم إخفاء المشترك — الاشتراكات والديون المرتبطة تبقى في السجل.',
-                              })
+                              setDeleteTarget({ id: row.id, name: row.name })
                             }
                             title="حذف المشترك"
                           >
@@ -448,12 +561,14 @@ function CustomersHubContent() {
         }}
       />
 
-      <DeleteConfirmModal
-        open={open}
-        onClose={closeModal}
+      <RecordDeleteOptionsModal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
         onConfirm={handleDeleteConfirm}
-        recordName={target?.name ?? ''}
-        consequences={target?.consequences}
+        recordName={deleteTarget?.name ?? ''}
+        entityLabel="المشترك"
+        keepDataDescription="يُخفى المشترك من القائمة ويمكن استرجاعه من سلة المحذوفات. الاشتراكات والديون والدفعات تبقى محفوظة."
+        withDataDescription="يُحذف المشترك وجميع اشتراكاته ودفعاته وديونه وفتراته نهائياً — لا يمكن التراجع."
       />
     </div>
   )

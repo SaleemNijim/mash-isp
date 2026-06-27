@@ -8,7 +8,10 @@ import { createClient } from '@/lib/supabase/client'
 import { useDeleteConfirm } from '@/hooks/useDeleteConfirm'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import { DeleteConfirmModal } from '@/components/shared/DeleteConfirmModal'
+import { DataPanel } from '@/components/shared/DataPanel'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
+import { collectCascadePortIds } from '@/lib/network/ports'
 
 interface PortRow {
   id: string
@@ -46,26 +49,9 @@ function buildTree(ports: PortRow[]): PortNode[] {
   return roots
 }
 
-/** يجمع معرّف المنفذ وجميع أبنائه (عمقاً) */
+/** يجمع معرّف المنفذ وجميع أبنائه (عمقاً) — re-export للتوافق */
 function collectCascadeIds(rootId: string, ports: PortRow[]): string[] {
-  const childrenByParent = new Map<string, PortRow[]>()
-  for (const p of ports) {
-    if (!p.parent_port_id) continue
-    const siblings = childrenByParent.get(p.parent_port_id) ?? []
-    siblings.push(p)
-    childrenByParent.set(p.parent_port_id, siblings)
-  }
-
-  const ids: string[] = [rootId]
-  const stack = [rootId]
-  while (stack.length > 0) {
-    const current = stack.pop()!
-    for (const child of childrenByParent.get(current) ?? []) {
-      ids.push(child.id)
-      stack.push(child.id)
-    }
-  }
-  return ids
+  return collectCascadePortIds(rootId, ports)
 }
 
 export default function NetworkPortsPage() {
@@ -109,8 +95,8 @@ function NetworkPortsContent() {
       name: node.name,
       consequences:
         childCount > 0
-          ? `سيتم حذف هذا المنفذ و${childCount.toLocaleString('ar-EG')} منفذاً فرعياً (Cascade Soft Delete).`
-          : 'سيتم إخفاء المنفذ — الأجهزة المرتبطة تبقى في السجل.',
+          ? `حذف نهائي لهذا المنفذ و${childCount.toLocaleString('ar-EG')} منفذاً فرعياً وجميع الراوترات المرتبطة. باقي البورتات لن تتأثر.`
+          : 'حذف نهائي للمنفذ وجميع الراوترات المرتبطة به. باقي البورتات لن تتأثر.',
     })
   }
 
@@ -119,42 +105,43 @@ function NetworkPortsContent() {
 
     const cascadeIds = collectCascadeIds(target.id, ports)
 
-    const { error } = await supabase
-      .from('network_ports')
-      .update({ is_deleted: true })
-      .in('id', cascadeIds)
-
-    if (error) throw new Error('delete_failed')
+    const res = await fetch('/api/network/wipe-port', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port_id: target.id }),
+    })
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    if (!res.ok) throw new Error(body.error ?? 'delete_failed')
 
     toast.success(
       cascadeIds.length > 1
-        ? `تم حذف ${cascadeIds.length.toLocaleString('ar-EG')} منفذ`
-        : 'تم الحذف بنجاح',
+        ? `تم حذف ${cascadeIds.length.toLocaleString('ar-EG')} منفذاً نهائياً`
+        : 'تم الحذف نهائياً',
     )
     invalidateAll()
+    void queryClient.invalidateQueries({ queryKey: ['network-ports'] })
+    void queryClient.invalidateQueries({ queryKey: ['network_routers'] })
   }
 
   return (
     <div dir="rtl" className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">منافذ الشبكة</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {ports.length.toLocaleString('ar-EG')} منفذ — عرض هرمي
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void refetch()}
-          className="gap-1.5"
-        >
-          <RefreshCw size={14} />
-          تحديث
-        </Button>
-      </div>
+      <PageHeader
+        title="منافذ الشبكة"
+        description={`${ports.length.toLocaleString('ar-EG')} منفذ — عرض هرمي`}
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetch()}
+            className="gap-1.5"
+          >
+            <RefreshCw size={14} />
+            تحديث
+          </Button>
+        }
+      />
 
-      <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+      <DataPanel noPadding>
         {isLoading && (
           <p className="py-12 text-center text-sm text-muted-foreground">
             جارٍ التحميل…
@@ -168,7 +155,7 @@ function NetworkPortsContent() {
         )}
 
         {!isLoading && tree.length > 0 && (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-border">
             {tree.map((node) => (
               <PortTreeNode
                 key={node.id}
@@ -179,13 +166,14 @@ function NetworkPortsContent() {
             ))}
           </ul>
         )}
-      </div>
+      </DataPanel>
 
       <DeleteConfirmModal
         open={open}
         onClose={closeModal}
         onConfirm={handleDeleteConfirm}
         recordName={target?.name ?? ''}
+        isPermanent
         consequences={target?.consequences}
       />
     </div>

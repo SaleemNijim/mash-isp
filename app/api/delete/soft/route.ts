@@ -9,8 +9,10 @@ import { createClient } from '@/lib/supabase/server'
  */
 const SOFT_DELETE_WHITELIST = [
   'customers',
+  'distributors',
   'subscriptions',
-  'internet_credentials',
+  'ppp_plans',
+  'ppp_batches',
   'card_products',
   'card_batches',
   'payments',
@@ -18,6 +20,7 @@ const SOFT_DELETE_WHITELIST = [
   'pending_tasks',
   'subscription_periods',
   'network_routers',
+  'network_bypassed',
   'network_ports',
 ] as const
 
@@ -80,6 +83,25 @@ export async function POST(request: NextRequest) {
 
   // 4. Soft delete — UPDATE only, never DELETE
   const supabase = await createClient()
+
+  if (table === 'distributors') {
+    const { data: distributor, error: fetchError } = await supabase
+      .from('distributors')
+      .select('balance_due')
+      .eq('id', id)
+      .eq('is_deleted', false)
+      .maybeSingle()
+
+    if (fetchError) {
+      return NextResponse.json({ error: fetchError.message }, { status: 500 })
+    }
+    if (!distributor) {
+      return NextResponse.json({ error: 'record not found' }, { status: 404 })
+    }
+    if (Number(distributor.balance_due) > 0) {
+      return NextResponse.json({ error: 'distributor_has_balance' }, { status: 400 })
+    }
+  }
 
   const { error } = await supabase
     .from(table)

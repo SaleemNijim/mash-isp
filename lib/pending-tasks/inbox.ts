@@ -63,6 +63,14 @@ function customerFromRow(
   return { name: c?.name ?? '—', phone: c?.phone ?? '' }
 }
 
+export async function countPendingInbox(
+  supabase: SupabaseClient,
+  tenantId: string,
+): Promise<number> {
+  const items = await fetchPendingInbox(supabase, tenantId)
+  return items.length
+}
+
 export async function fetchPendingInbox(
   supabase: SupabaseClient,
   tenantId: string,

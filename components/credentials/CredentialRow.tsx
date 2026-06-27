@@ -1,11 +1,18 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { usePermissions } from '@/hooks/usePermissions'
+import { cn } from '@/lib/utils'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import { Button } from '@/components/ui/button'
+import { MASH_TD, MASH_TD_ACTIONS, MASH_TD_INDEX, MASH_TD_LTR } from '@/lib/ui/mash-table'
+
+export interface CredentialAssignee {
+  customerId: string
+  customerName: string
+}
 
 export interface CredentialListItem {
   id: string
@@ -15,6 +22,9 @@ export interface CredentialListItem {
   is_used: boolean
   is_deleted: boolean
   created_at: string
+  plan_id?: string | null
+  plan_name?: string | null
+  assignee?: CredentialAssignee | null
 }
 
 function credentialStatus(row: CredentialListItem): {
@@ -22,29 +32,20 @@ function credentialStatus(row: CredentialListItem): {
   label: string
   className: string
 } {
-  if (row.is_deleted) {
-    return { emoji: '⚫', label: 'محذوف', className: 'text-gray-500' }
-  }
   if (row.is_used) {
-    return { emoji: '🔴', label: 'مستخدم', className: 'text-red-600' }
+    return { emoji: '🔴', label: 'مستخدم', className: 'text-destructive' }
   }
-  return { emoji: '🟢', label: 'متاح', className: 'text-green-600' }
+  return { emoji: '🟢', label: 'متاح', className: 'text-mash-success-text' }
 }
 
 function PasswordCell({ credentialId }: { credentialId: string }) {
   const supabase = createClient()
-  const hasPermission = usePermissions((s) => s.hasPermission)
-  const canView = hasPermission('view_full_password')
   const [password, setPassword] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!canView) {
-      setLoading(false)
-      return
-    }
-
     let cancelled = false
+    setLoading(true)
     void (async () => {
       try {
         const { data, error } = await supabase.rpc('reveal_credential_password', {
@@ -62,18 +63,14 @@ function PasswordCell({ credentialId }: { credentialId: string }) {
     return () => {
       cancelled = true
     }
-  }, [credentialId, canView, supabase])
-
-  if (!canView) {
-    return <span className="text-muted-foreground">—</span>
-  }
+  }, [credentialId, supabase])
 
   if (loading) {
     return <span className="font-mono text-muted-foreground">…</span>
   }
 
   return (
-    <span className="font-mono text-gray-900" dir="ltr">
+    <span className="font-mono text-foreground" dir="ltr">
       {password?.trim() || '—'}
     </span>
   )
@@ -83,42 +80,61 @@ interface CredentialRowProps {
   row: CredentialListItem
   style?: React.CSSProperties
   onDelete: (row: CredentialListItem) => void
+  showPlanColumn?: boolean
+  index?: number
 }
 
-export function CredentialRow({ row, style, onDelete }: CredentialRowProps) {
+export function CredentialRow({
+  row,
+  style,
+  onDelete,
+  showPlanColumn = false,
+  index,
+}: CredentialRowProps) {
   const st = credentialStatus(row)
 
   return (
-    <tr
-      style={style}
-      className={`hover:bg-mash-page border-b border-gray-100 ${
-        row.is_deleted ? 'bg-gray-50/80 opacity-75' : ''
-      }`}
-    >
-      <td className="px-3 py-2 font-medium font-mono">{row.username}</td>
-      <td className="px-3 py-2">
+    <tr style={style} className="hover:bg-mash-page border-b border-mash-row-border">
+      {index != null && <td className={MASH_TD_INDEX}>{index}</td>}
+      {showPlanColumn && (
+        <td className={MASH_TD}>{row.plan_name ?? '—'}</td>
+      )}
+      <td className={cn(MASH_TD_LTR, 'font-medium')}>{row.username}</td>
+      <td className={MASH_TD_LTR}>
         <PasswordCell credentialId={row.id} />
       </td>
-      <td className="px-3 py-2">
+      <td className={MASH_TD}>
         <span className={`inline-flex items-center gap-1.5 text-sm ${st.className}`}>
           <span aria-hidden>{st.emoji}</span>
           {st.label}
         </span>
       </td>
-      <td className="px-3 py-2">
-        {!row.is_deleted && (
-          <PermissionGuard permission="delete_records">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
-              onClick={() => onDelete(row)}
-            >
-              <Trash2 size={12} />
-              حذف
-            </Button>
-          </PermissionGuard>
+      <td className={MASH_TD}>
+        {!row.is_used ? (
+          <span className="text-muted-foreground">—</span>
+        ) : row.assignee ? (
+          <Link
+            href={`/subscriptions/customer/${row.assignee.customerId}`}
+            className="text-sm text-primary hover:underline font-medium"
+          >
+            {row.assignee.customerName}
+          </Link>
+        ) : (
+          <span className="text-xs text-muted-foreground">غير مربوط</span>
         )}
+      </td>
+      <td className={MASH_TD_ACTIONS}>
+        <PermissionGuard permission="delete_records">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-destructive hover:text-destructive gap-1"
+            onClick={() => onDelete(row)}
+          >
+            <Trash2 size={12} />
+            حذف
+          </Button>
+        </PermissionGuard>
       </td>
     </tr>
   )

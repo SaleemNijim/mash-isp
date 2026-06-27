@@ -263,7 +263,7 @@ function WarehouseContent() {
     <div dir="rtl" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">المستودع</h1>
+          <h1 className="mash-page-title">المستودع</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             إدارة الأصناف وحركات الاستلام والإخراج
           </p>
@@ -318,30 +318,18 @@ function WarehouseContent() {
 
           <div
             ref={itemsContainerRef}
-            className="overflow-auto border border-gray-200 rounded-lg bg-white"
+            className="mash-table-scroll border border-border rounded-lg bg-card"
             style={{ height: 'calc(100vh - 320px)', minHeight: 360 }}
           >
-            <table className="w-full text-sm border-collapse">
-              <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+            <table className="mash-data-table">
+              <thead>
                 <tr>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                    الصنف
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                    التصنيف
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                    الوحدة
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                    الكمية
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                    الحد الأدنى
-                  </th>
-                  <th className="px-3 py-2.5 text-center font-semibold text-gray-700 border-b min-w-[280px]">
-                    حركة
-                  </th>
+                  <th className="col-rtl">الصنف</th>
+                  <th className="col-rtl">التصنيف</th>
+                  <th className="col-c">الوحدة</th>
+                  <th className="col-c col-mono col-amount">الكمية</th>
+                  <th className="col-c col-mono col-amount">الحد الأدنى</th>
+                  <th className="col-actions-wide col-c">حركة</th>
                 </tr>
               </thead>
               <tbody>
@@ -383,50 +371,50 @@ function WarehouseContent() {
                     <tr
                       key={row.id}
                       style={{ height: vItem.size }}
-                      className={`border-b border-gray-100 hover:bg-mash-page ${
+                      className={
                         lowStock
-                          ? 'bg-red-50 hover:bg-red-50/80 border-red-100'
-                          : ''
-                      }`}
+                          ? 'bg-mash-danger-bg hover:bg-mash-danger-bg/80'
+                          : undefined
+                      }
                     >
-                      <td className="px-3 py-2 font-medium">
+                      <td className="col-rtl font-medium">
                         <div className="flex items-center gap-1.5">
                           {lowStock && (
                             <AlertTriangle
                               size={14}
-                              className="text-red-600 shrink-0"
+                              className="text-destructive shrink-0"
                               aria-label="مخزون منخفض"
                             />
                           )}
-                          <span className={lowStock ? 'text-red-800' : ''}>
+                          <span className={lowStock ? 'text-mash-danger-text' : ''}>
                             {row.name}
                           </span>
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-muted-foreground">
+                      <td className="col-rtl text-muted-foreground">
                         {row.category?.trim() || '—'}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="col-c">
                         <Badge variant="outline" className="text-xs">
                           {WAREHOUSE_UNIT_LABELS[unit]}
                         </Badge>
                       </td>
                       <td
-                        className={`px-3 py-2 tabular-nums font-medium ${
-                          lowStock ? 'text-red-700' : ''
+                        className={`col-c col-mono col-amount font-medium ${
+                          lowStock ? 'text-mash-danger-text' : ''
                         }`}
                       >
                         {formatWarehouseQuantity(row.quantity, unit)}
                       </td>
-                      <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                      <td className="col-c col-mono col-amount text-muted-foreground">
                         {formatWarehouseQuantity(row.min_quantity, unit)}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="col-actions-wide col-c">
                         <div className="flex flex-wrap items-center justify-center gap-1">
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-7 px-2 text-xs gap-1 text-green-700 border-green-200 hover:bg-green-50"
+                            className="h-7 px-2 text-xs gap-1 text-mash-success-text border-mash-success-bg hover:bg-mash-success-bg"
                             onClick={() => openMovement(row, 'receive')}
                           >
                             <ArrowDownToLine size={12} />
@@ -496,27 +484,17 @@ function WarehouseContent() {
 
           <div
             ref={movementsContainerRef}
-            className="overflow-auto border border-gray-200 rounded-lg bg-white"
+            className="mash-table-scroll border border-border rounded-lg bg-card"
             style={{ height: 'calc(100vh - 320px)', minHeight: 360 }}
           >
-            <table className="w-full text-sm border-collapse">
-              <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+            <table className="mash-data-table">
+              <thead>
                 <tr>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                    التاريخ
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                    الصنف
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                    النوع
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                    الكمية
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                    ملاحظات
-                  </th>
+                  <th className="col-rtl">التاريخ</th>
+                  <th className="col-rtl">الصنف</th>
+                  <th className="col-c">النوع</th>
+                  <th className="col-c col-mono col-amount">الكمية</th>
+                  <th className="col-rtl col-text">ملاحظات</th>
                 </tr>
               </thead>
               <tbody>
@@ -546,28 +524,24 @@ function WarehouseContent() {
                   const row = movements[vItem.index]
                   if (!row) return null
                   return (
-                    <tr
-                      key={row.id}
-                      style={{ height: vItem.size }}
-                      className="hover:bg-mash-page border-b border-gray-100"
-                    >
-                      <td className="px-3 py-2 text-muted-foreground">
+                    <tr key={row.id} style={{ height: vItem.size }}>
+                      <td className="col-rtl text-muted-foreground">
                         {formatDate(row.created_at)}
                       </td>
-                      <td className="px-3 py-2 font-medium">
+                      <td className="col-rtl font-medium">
                         {row.warehouse_items?.name ?? '—'}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="col-c">
                         <MovementBadge type={row.movement_type} />
                       </td>
-                      <td className="px-3 py-2 tabular-nums">
+                      <td className="col-c col-mono col-amount">
                         {formatWarehouseQuantity(
                           row.quantity,
                           row.warehouse_items?.unit ?? 'piece',
                         )}{' '}
                         {WAREHOUSE_UNIT_LABELS[row.warehouse_items?.unit ?? 'piece']}
                       </td>
-                      <td className="px-3 py-2 text-muted-foreground max-w-[200px] truncate">
+                      <td className="col-rtl text-muted-foreground truncate">
                         {row.notes?.trim() || '—'}
                       </td>
                     </tr>

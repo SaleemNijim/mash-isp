@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createMiddlewareClient } from '@/lib/supabase/proxy-client'
-import { isEmployeeRouteAllowed } from '@/lib/navigation'
+import { EMPLOYEE_ROUTE_PREFIXES } from '@/lib/navigation'
+import { isEmployeeRouteAllowed } from '@/lib/permissions'
 
 type ProxyProfile = {
   role: string
@@ -70,7 +71,21 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   if (profile.role === 'employee') {
-    if (!isEmployeeRouteAllowed(pathname)) {
+    const isKnownRoute = EMPLOYEE_ROUTE_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(prefix + '/'),
+    )
+    if (!isKnownRoute) {
+      return NextResponse.redirect(new URL('/sales', request.url))
+    }
+
+    const { data: permRows } = await supabase
+      .from('user_permissions')
+      .select('permission')
+      .eq('user_id', user.id)
+
+    const permissions = (permRows ?? []).map((r) => r.permission as string)
+
+    if (!isEmployeeRouteAllowed(pathname, permissions)) {
       return NextResponse.redirect(new URL('/sales', request.url))
     }
   }
@@ -80,6 +95,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon\\.ico|login|register|verify-email|subscription-expired|suspended|auth|features|pricing|contact)(?:.+))',
+    '/((?!_next/static|_next/image|favicon\\.ico|login|register|verify-email|forgot-password|reset-password|subscription-expired|suspended|auth|features|pricing|contact)(?:.+))',
   ],
 }

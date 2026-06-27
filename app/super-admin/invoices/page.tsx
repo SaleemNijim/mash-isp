@@ -36,6 +36,7 @@ import {
 interface TenantOption {
   id: string
   name: string
+  is_active: boolean
   subscription_end: string | null
 }
 
@@ -195,8 +196,7 @@ export default function SuperAdminInvoicesPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tenants')
-        .select('id,name,subscription_end')
-        .eq('is_active', true)
+        .select('id,name,is_active,subscription_end')
         .order('name')
       if (error) throw error
       return data ?? []
@@ -289,17 +289,23 @@ export default function SuperAdminInvoicesPage() {
         invoice.billing_cycle,
       )
 
-      const { error: tenantError } = await supabase
+      const { data: updatedTenant, error: tenantError } = await supabase
         .from('tenants')
         .update({
           subscription_end: newSubscriptionEnd,
           is_trial: false,
+          is_active: true,
           billing_cycle: invoice.billing_cycle,
           plan_id: invoice.plan_id,
         })
         .eq('id', invoice.tenant_id)
+        .select('id')
+        .single()
 
       if (tenantError) throw tenantError
+      if (!updatedTenant) {
+        throw new Error('لم يتم تحديث الشركة — تحقق من صلاحيات Super Admin')
+      }
 
       toast.success('تم تأكيد الدفع وتمديد الاشتراك')
       void queryClient.invalidateQueries({ queryKey: ['super-admin-invoices'] })
@@ -500,6 +506,7 @@ export default function SuperAdminInvoicesPage() {
                   {tenants.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}
+                      {!t.is_active ? ' (معطّلة)' : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>

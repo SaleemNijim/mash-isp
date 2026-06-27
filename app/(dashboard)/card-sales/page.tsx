@@ -12,6 +12,16 @@ import { RefreshCw, Search, ShoppingCart } from 'lucide-react'
 import { useInfiniteVirtualData } from '@/hooks/useInfiniteVirtualData'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import { SellToDistributorModal } from '@/components/card-sales/SellToDistributorModal'
+import { DataPanel } from '@/components/shared/DataPanel'
+import {
+  MASH_TABLE,
+  MASH_TABLE_SCROLL,
+  MASH_TH,
+  MASH_TH_CENTER,
+  MASH_TD,
+  MASH_TD_AMOUNT,
+  MASH_EMPTY_ROW,
+} from '@/lib/ui/mash-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -119,7 +129,7 @@ function CardSalesContent() {
     <div dir="rtl" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">مبيعات الموزعين</h1>
+          <h1 className="mash-page-title">مبيعات الموزعين</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {sales.length.toLocaleString('ar-EG')} عملية بيع
             {hasNextPage ? ' (المزيد متاح)' : ''}
@@ -162,45 +172,32 @@ function CardSalesContent() {
         />
       </div>
 
+      <DataPanel noPadding>
       <div
         ref={containerRef}
-        className="overflow-auto border border-gray-200 rounded-lg bg-white"
+        className={MASH_TABLE_SCROLL}
         style={{ height: 'calc(100vh - 280px)', minHeight: 360 }}
       >
-        <table className="w-full text-sm border-collapse">
-          <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+        <table className={MASH_TABLE}>
+          <thead>
             <tr>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                الموزع
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                الإجمالي
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                عمولة %
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                رصيد سابق
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                التاريخ
-              </th>
+              <th className={MASH_TH}>الموزع</th>
+              <th className={`${MASH_TH_CENTER} col-amount`}>الإجمالي</th>
+              <th className={`${MASH_TH_CENTER} col-amount`}>عمولة %</th>
+              <th className={`${MASH_TH_CENTER} col-amount`}>رصيد سابق</th>
+              <th className={MASH_TH}>التاريخ</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
-              <tr>
-                <td colSpan={5} className="py-12 text-center text-muted-foreground">
-                  جارٍ التحميل…
-                </td>
+              <tr className={MASH_EMPTY_ROW}>
+                <td colSpan={5}>جارٍ التحميل…</td>
               </tr>
             )}
 
             {!isLoading && sales.length === 0 && (
-              <tr>
-                <td colSpan={5} className="py-12 text-center text-muted-foreground">
-                  لا توجد مبيعات
-                </td>
+              <tr className={MASH_EMPTY_ROW}>
+                <td colSpan={5}>لا توجد مبيعات</td>
               </tr>
             )}
 
@@ -217,21 +214,20 @@ function CardSalesContent() {
                 <tr
                   key={row.id}
                   style={{ height: vItem.size }}
-                  className="hover:bg-mash-page border-b border-gray-100"
                 >
-                  <td className="px-3 py-2 font-medium">{row.distributor_name}</td>
-                  <td className="px-3 py-2 tabular-nums">
+                  <td className={`${MASH_TD} font-medium`}>{row.distributor_name}</td>
+                  <td className={MASH_TD_AMOUNT}>
                     {formatMoney(row.total_amount)}
                   </td>
-                  <td className="px-3 py-2 tabular-nums">
+                  <td className={MASH_TD_AMOUNT}>
                     {row.commission_percent != null
                       ? `${Number(row.commission_percent).toLocaleString('ar-EG')}%`
                       : '—'}
                   </td>
-                  <td className="px-3 py-2 tabular-nums">
+                  <td className={MASH_TD_AMOUNT}>
                     {formatMoney(row.previous_balance)}
                   </td>
-                  <td className="px-3 py-2">{formatDate(row.created_at)}</td>
+                  <td className={MASH_TD}>{formatDate(row.created_at)}</td>
                 </tr>
               )
             })}
@@ -252,6 +248,7 @@ function CardSalesContent() {
           </tbody>
         </table>
       </div>
+      </DataPanel>
 
       <SellToDistributorModal
         open={sellOpen}

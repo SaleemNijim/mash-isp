@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast, Toaster } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { mapAuthErrorMessage } from '@/lib/auth/auth-errors'
 import {
   authNetworkErrorMessage,
   isAuthNetworkError,
@@ -12,6 +13,7 @@ import {
 } from '@/lib/auth/network-error'
 import { resolvePostLoginPath } from '@/lib/auth-redirect'
 import { fetchOrCompleteUserProfile } from '@/lib/auth/complete-user-setup'
+import { AuthShell } from '@/components/shared/AuthShell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -51,12 +53,12 @@ export default function LoginPage() {
       if (error) {
         if (isAuthNetworkError(error)) {
           toast.error(authNetworkErrorMessage())
+        } else if (error.message === 'Email not confirmed') {
+          sessionStorage.setItem('mash_pending_verify_email', email.trim())
+          toast.error('يجب تأكيد البريد أولاً — أدخل رمز التأكيد')
+          router.push(`/verify-email?email=${encodeURIComponent(email.trim())}`)
         } else {
-          toast.error(
-            error.message === 'Invalid login credentials'
-              ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
-              : error.message,
-          )
+          toast.error(mapAuthErrorMessage(error.message))
         }
         setLoading(false)
         return
@@ -105,62 +107,63 @@ export default function LoginPage() {
   return (
     <>
       <Toaster position="top-center" richColors />
-      <div className="min-h-screen flex flex-col items-center justify-center bg-mash-page px-4 py-12" dir="rtl">
-        <Link href="/" className="text-lg font-medium text-mash-text mb-6">
-          MASH ISP
-        </Link>
-        <div className="w-full max-w-[420px]">
-          <div className="bg-mash-surface rounded-xl border border-mash-border p-8">
-            <div className="text-center mb-8">
-              <h1 className="text-xl font-medium text-mash-text">تسجيل الدخول</h1>
-              <p className="text-mash-text-muted text-sm mt-1">أدخل بياناتك للدخول إلى حسابك</p>
-            </div>
-
-            <form onSubmit={handleLogin} className="space-y-5">
-              <div className="space-y-1.5">
-                <Label htmlFor="email">البريد الإلكتروني</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="example@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  dir="ltr"
-                  className="text-right"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="password">كلمة المرور</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
-                  dir="ltr"
-                  className="text-right"
-                />
-              </div>
-
-              <Button type="submit" className="w-full min-h-11" disabled={loading}>
-                {loading ? 'جارِ الدخول...' : 'دخول'}
-              </Button>
-            </form>
-
-            <p className="text-center text-sm text-mash-text-muted mt-6">
-              ليس لديك حساب؟{' '}
-              <Link href="/register" className="text-primary-600 font-medium hover:underline">
-                ابدأ مجاناً
-              </Link>
-            </p>
-          </div>
+      <AuthShell>
+        <div className="mb-8 text-center">
+          <h1 className="text-xl font-bold text-[#0D1F1A]">تسجيل الدخول</h1>
+          <p className="mt-1 text-sm text-[#4A6B60]">أدخل بياناتك للدخول إلى حسابك</p>
         </div>
-      </div>
+
+        <form onSubmit={handleLogin} className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="email">البريد الإلكتروني</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="example@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              dir="ltr"
+              className="text-right"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="password">كلمة المرور</Label>
+              <Link
+                href="/forgot-password"
+                className="text-xs font-medium text-[#0F6E56] hover:underline"
+              >
+                نسيت كلمة المرور؟
+              </Link>
+            </div>
+            <Input
+              id="password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+              dir="ltr"
+              className="text-right"
+            />
+          </div>
+
+          <Button type="submit" className="mash-btn-primary w-full" disabled={loading}>
+            {loading ? 'جارِ الدخول...' : 'دخول'}
+          </Button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-[#4A6B60]">
+          ليس لديك حساب؟{' '}
+          <Link href="/register" className="font-bold text-[#0F6E56] hover:underline">
+            ابدأ مجاناً
+          </Link>
+        </p>
+      </AuthShell>
     </>
   )
 }

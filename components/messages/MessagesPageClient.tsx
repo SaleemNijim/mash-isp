@@ -280,7 +280,7 @@ export function MessagesPageClient({ role }: MessagesPageClientProps) {
             )}
             {isError && (
               <div className="flex flex-col items-center gap-2 p-4 text-center">
-                <p className="text-sm text-red-600">
+                <p className="text-sm text-destructive">
                   تعذّر تحميل الرسائل:{' '}
                   {inboxError instanceof Error ? inboxError.message : 'خطأ غير معروف'}
                 </p>
@@ -319,7 +319,7 @@ export function MessagesPageClient({ role }: MessagesPageClientProps) {
             )}
             {sentError && (
               <div className="flex flex-col items-center gap-2 p-4 text-center">
-                <p className="text-sm text-red-600">
+                <p className="text-sm text-destructive">
                   تعذّر تحميل الرسائل المرسلة:{' '}
                   {sentLoadError instanceof Error ? sentLoadError.message : 'خطأ غير معروف'}
                 </p>

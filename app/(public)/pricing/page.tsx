@@ -3,6 +3,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PricingCards } from '@/components/public/PricingCards'
+import { PublicPageHero } from '@/components/shared/PublicPageHero'
 import { CheckCircle2, XCircle, ChevronDown } from 'lucide-react'
 import type { Plan } from '@/components/public/PricingCards'
 import { getSubscriptionPlans } from '@/lib/public/plans'
@@ -25,16 +26,14 @@ function ComparisonTable({ plans }: { plans: Plan[] }) {
   if (!allFeatures.length) return null
 
   return (
-    <section className="py-16 bg-mash-page border-t border-mash-border" dir="rtl">
-      <div className="max-w-5xl mx-auto px-8">
-        <div className="text-center mb-10">
-          <span className="text-xs font-medium text-primary-600 block mb-2">المقارنة</span>
-          <h2 className="text-2xl sm:text-3xl font-medium text-mash-text">
-            مقارنة مميزات الخطط
-          </h2>
+    <section className="landing-section border-t border-[#D1E8E2] bg-[#F8FFFE]" dir="rtl">
+      <div className="landing-container">
+        <div className="mb-10 text-center">
+          <span className="mb-2 block text-sm font-bold text-[#0F6E56]">المقارنة</span>
+          <h2 className="text-2xl font-bold text-[#0D1F1A] sm:text-3xl">مقارنة مميزات الخطط</h2>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-mash-border bg-mash-surface">
+        <div className="overflow-x-auto rounded-2xl border border-[#D1E8E2] bg-white shadow-[0_2px_12px_rgba(15,110,86,0.06)]">
           <table className="w-full text-sm text-right mash-data-table">
             <thead>
               <tr className="border-b border-mash-border">
@@ -74,15 +73,15 @@ function ComparisonTable({ plans }: { plans: Plan[] }) {
 
 function FaqItem({ q, a }: { q: string; a: string }) {
   return (
-    <details className="group border border-mash-border rounded-xl overflow-hidden bg-mash-surface">
-      <summary className="flex items-center justify-between gap-4 px-6 py-5 cursor-pointer font-medium text-mash-text hover:bg-mash-page transition-colors list-none min-h-11">
+    <details className="group overflow-hidden rounded-2xl border border-[#D1E8E2] bg-white">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 font-bold text-[#0D1F1A] transition-colors hover:bg-[#F8FFFE]">
         {q}
         <ChevronDown
           size={18}
-          className="shrink-0 text-mash-text-muted transition-transform group-open:rotate-180"
+          className="shrink-0 text-[#4A6B60] transition-transform group-open:rotate-180"
         />
       </summary>
-      <div className="px-6 py-4 text-mash-text-secondary text-sm leading-relaxed border-t border-mash-border bg-mash-page">
+      <div className="border-t border-[#D1E8E2] bg-[#F8FFFE] px-6 py-4 text-sm leading-relaxed text-[#4A6B60]">
         {a}
       </div>
     </details>
@@ -98,34 +97,26 @@ export default async function PricingPage() {
     trialPlan?.trial_days != null ? ` لمدة ${trialPlan.trial_days} يوماً` : ''
 
   return (
-    <div dir="rtl">
-      <section className="bg-mash-page py-20 text-center px-8 border-b border-mash-border">
-        <span className="text-xs font-medium text-primary-600 block mb-3">الأسعار</span>
-        <h1 className="text-3xl sm:text-4xl font-medium text-mash-text mb-4">
-          خطط مرنة لكل حجم شركة
-        </h1>
-        <p className="text-base text-mash-text-secondary max-w-xl mx-auto">
-          ابدأ بتجربة مجانية كاملة — لا بطاقة ائتمان مطلوبة — ثم اختر الخطة التي تناسبك.
-        </p>
-      </section>
+    <div dir="rtl" className="bg-white">
+      <PublicPageHero
+        eyebrow="الأسعار"
+        title="خطط مرنة لكل حجم شركة"
+        description="ابدأ بتجربة مجانية كاملة — لا بطاقة ائتمان مطلوبة — ثم اختر الخطة التي تناسبك."
+      />
 
-      <section className="py-16 bg-mash-surface">
-        <div className="max-w-6xl mx-auto px-8">
+      <section className="landing-section pt-12">
+        <div className="landing-container">
           <PricingCards />
         </div>
       </section>
 
       {plans.length > 0 && <ComparisonTable plans={plans} />}
 
-      <section className="py-16 bg-mash-surface border-t border-mash-border">
-        <div className="max-w-3xl mx-auto px-8">
-          <div className="text-center mb-10">
-            <span className="text-xs font-medium text-primary-600 block mb-2">
-              الأسئلة الشائعة
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-medium text-mash-text">
-              أسئلة يسألها الجميع
-            </h2>
+      <section className="landing-section bg-[#F8FFFE] border-t border-[#D1E8E2]">
+        <div className="landing-container max-w-3xl">
+          <div className="mb-10 text-center">
+            <span className="mb-2 block text-sm font-bold text-[#0F6E56]">الأسئلة الشائعة</span>
+            <h2 className="text-2xl font-bold text-[#0D1F1A] sm:text-3xl">أسئلة يسألها الجميع</h2>
           </div>
 
           <div className="space-y-3">
@@ -145,14 +136,12 @@ export default async function PricingPage() {
         </div>
       </section>
 
-      <section className="bg-mash-page py-16 text-center px-8 border-t border-mash-border">
-        <h2 className="text-2xl sm:text-3xl font-medium text-mash-text mb-4">
-          جاهز لتجربة MASH ISP؟
-        </h2>
-        <p className="text-mash-text-secondary mb-8 max-w-lg mx-auto">
+      <section className="border-t border-[#D1E8E2] bg-white py-16 text-center px-8">
+        <h2 className="mb-4 text-2xl font-bold text-[#0D1F1A] sm:text-3xl">جاهز لتجربة MASH ISP؟</h2>
+        <p className="mx-auto mb-8 max-w-lg text-[#4A6B60]">
           سجّل شركتك الآن واستمتع بتجربة مجانية كاملة — بدون أي التزام.
         </p>
-        <Link href="/register" className="mash-btn-primary">
+        <Link href="/register" className="landing-btn-primary">
           ابدأ مجاناً
         </Link>
       </section>

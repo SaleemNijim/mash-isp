@@ -17,6 +17,8 @@ export interface MacChangeTarget {
   id: string
   name: string
   mac_address: string | null
+  /** قيمة مقترحة من التعديل المباشر في الجدول */
+  proposedMac?: string
 }
 
 interface ConfirmChangeModalProps {
@@ -41,9 +43,9 @@ export function ConfirmChangeModal({
 
   useEffect(() => {
     if (!open) return
-    setNewMac('')
+    setNewMac(target?.proposedMac?.trim() ?? '')
     setConfirmInput('')
-  }, [open, target?.id])
+  }, [open, target?.id, target?.proposedMac])
 
   const trimmedMac = newMac.trim()
   const unchanged =
@@ -90,16 +92,16 @@ export function ConfirmChangeModal({
             <strong className="text-foreground">{target?.name ?? '—'}</strong>
           </p>
 
-          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm space-y-2">
+          <div className="rounded-lg border border-mash-info-bg bg-mash-info-bg p-3 text-sm space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-blue-800">MAC الحالي</span>
-              <code dir="ltr" className="font-mono text-xs bg-white px-2 py-1 rounded border">
+              <span className="text-mash-info-text">MAC الحالي</span>
+              <code dir="ltr" className="font-mono text-xs bg-card px-2 py-1 rounded border border-border">
                 {target?.mac_address || '—'}
               </code>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-blue-800">MAC الجديد</span>
-              <code dir="ltr" className="font-mono text-xs bg-white px-2 py-1 rounded border">
+              <span className="text-mash-info-text">MAC الجديد</span>
+              <code dir="ltr" className="font-mono text-xs bg-card px-2 py-1 rounded border border-border">
                 {trimmedMac || '—'}
               </code>
             </div>

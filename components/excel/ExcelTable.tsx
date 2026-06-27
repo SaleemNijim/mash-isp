@@ -72,7 +72,7 @@ export function ExcelTable({
   // ── Empty state ─────────────────────────────────────────────────────────────
   if (rows.length === 0) {
     return (
-      <div className="flex items-center justify-center h-24 text-sm text-gray-400 border border-gray-200 rounded-lg bg-gray-50">
+      <div className="flex items-center justify-center h-24 text-sm text-muted-foreground border border-border rounded-lg bg-muted/40">
         لا توجد بيانات للعرض
       </div>
     )
@@ -83,10 +83,10 @@ export function ExcelTable({
     <div className="space-y-2">
       {/* Toolbar */}
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-500 tabular-nums">
+        <span className="text-sm text-muted-foreground tabular-nums">
           {rows.length.toLocaleString('ar-EG')} صف &middot; {headers.length} عمود
           {onCellChange && (
-            <span className="text-xs text-gray-400 mr-2">· انقر مرتين لتعديل خلية</span>
+            <span className="text-xs text-muted-foreground/70 mr-2">· انقر مرتين لتعديل خلية</span>
           )}
         </span>
         {onExport && (
@@ -105,7 +105,7 @@ export function ExcelTable({
       {/* Scrollable virtual table */}
       <div
         ref={containerRef}
-        className="overflow-auto border border-gray-200 rounded-lg"
+        className="overflow-auto border border-border rounded-lg"
         style={{ height: maxHeight }}
       >
         <table
@@ -123,18 +123,18 @@ export function ExcelTable({
           </colgroup>
 
           {/* Sticky header */}
-          <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+          <thead className="sticky top-0 z-10 bg-muted/60 shadow-sm">
             <tr>
-              <th className="px-2 py-2 text-center text-gray-400 font-medium border-b border-gray-200">
+              <th className="px-2 py-2 text-center text-muted-foreground font-medium border-b border-border">
                 #
               </th>
               {headers.map((h, i) => (
                 <th
                   key={i}
-                  className="px-3 py-2 text-right font-semibold text-gray-700 border-b border-gray-200 truncate"
+                  className="px-3 py-2 text-right font-semibold text-foreground border-b border-border truncate"
                   title={h}
                 >
-                  {h || <span className="text-gray-300 font-normal italic">—</span>}
+                  {h || <span className="text-muted-foreground/50 font-normal italic">—</span>}
                 </th>
               ))}
             </tr>
@@ -157,12 +157,12 @@ export function ExcelTable({
                   style={{ height: vItem.size }}
                   className={
                     vItem.index % 2 === 0
-                      ? 'bg-white hover:bg-mash-page'
-                      : 'bg-gray-50/50 hover:bg-mash-page'
+                      ? 'bg-card hover:bg-mash-page'
+                      : 'bg-muted/30 hover:bg-mash-page'
                   }
                 >
                   {/* Row number */}
-                  <td className="px-2 text-center text-gray-400 border-b border-gray-100 select-none">
+                  <td className="px-2 text-center text-muted-foreground border-b border-mash-row-border select-none">
                     {vItem.index + 1}
                   </td>
 
@@ -173,7 +173,7 @@ export function ExcelTable({
                     return (
                       <td
                         key={ci}
-                        className="px-3 border-b border-gray-100 overflow-hidden"
+                        className="px-3 border-b border-mash-row-border overflow-hidden"
                         onDoubleClick={() =>
                           onCellChange ? startEdit(vItem.index, ci) : undefined
                         }
@@ -188,10 +188,10 @@ export function ExcelTable({
                               if (e.key === 'Enter') commitEdit()
                               if (e.key === 'Escape') cancelEdit()
                             }}
-                            className="w-full bg-blue-50 border border-blue-400 rounded px-1 py-0.5 outline-none text-xs"
+                            className="w-full bg-primary-50 border border-primary-400 rounded px-1 py-0.5 outline-none text-xs"
                           />
                         ) : (
-                          <span className="block truncate text-gray-700">
+                          <span className="block truncate text-foreground">
                             {rowData[ci] ?? ''}
                           </span>
                         )}

@@ -1,6 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 
 export function ContactForm() {
   const [form, setForm] = useState({ name: '', email: '', message: '' })
@@ -30,11 +33,11 @@ export function ContactForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      <div className="space-y-1.5">
-        <label htmlFor="name" className="block text-sm font-medium text-mash-text">
+      <div className="space-y-2">
+        <Label htmlFor="name">
           الاسم الكامل <span className="text-destructive">*</span>
-        </label>
-        <input
+        </Label>
+        <Input
           id="name"
           name="name"
           type="text"
@@ -42,15 +45,14 @@ export function ContactForm() {
           placeholder="محمد أحمد"
           value={form.name}
           onChange={handleChange}
-          className="w-full min-h-11 rounded-lg border border-mash-border bg-mash-surface px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 transition-colors"
         />
       </div>
 
-      <div className="space-y-1.5">
-        <label htmlFor="email" className="block text-sm font-medium text-mash-text">
+      <div className="space-y-2">
+        <Label htmlFor="email">
           البريد الإلكتروني <span className="text-destructive">*</span>
-        </label>
-        <input
+        </Label>
+        <Input
           id="email"
           name="email"
           type="email"
@@ -59,14 +61,14 @@ export function ContactForm() {
           dir="ltr"
           value={form.email}
           onChange={handleChange}
-          className="w-full min-h-11 rounded-lg border border-mash-border bg-mash-surface px-3 text-sm text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 transition-colors"
+          className="text-right"
         />
       </div>
 
-      <div className="space-y-1.5">
-        <label htmlFor="message" className="block text-sm font-medium text-mash-text">
+      <div className="space-y-2">
+        <Label htmlFor="message">
           الرسالة <span className="text-destructive">*</span>
-        </label>
+        </Label>
         <textarea
           id="message"
           name="message"
@@ -75,25 +77,21 @@ export function ContactForm() {
           placeholder="أخبرنا كيف يمكننا مساعدتك..."
           value={form.message}
           onChange={handleChange}
-          className="w-full rounded-lg border border-mash-border bg-mash-surface px-3 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600 transition-colors resize-none"
+          className="w-full resize-none rounded-xl border border-input bg-white px-3 py-2.5 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
         />
       </div>
 
-      <button
-        type="submit"
-        disabled={status === 'sending'}
-        className="mash-btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
-      >
+      <Button type="submit" disabled={status === 'sending'} className="mash-btn-primary w-full">
         {status === 'sending' ? 'جارِ الإرسال...' : 'أرسل رسالة'}
-      </button>
+      </Button>
 
       {status === 'sent' && (
-        <p className="text-center text-sm text-mash-success-text font-medium">
+        <p className="text-center text-sm font-medium text-[#27500A]">
           تم فتح تطبيق البريد الإلكتروني بالرسالة. سنرد في أقرب وقت.
         </p>
       )}
       {status === 'error' && (
-        <p className="text-center text-sm text-destructive font-medium">
+        <p className="text-center text-sm font-medium text-destructive">
           حدث خطأ، يرجى المحاولة مجدداً أو التواصل عبر واتساب.
         </p>
       )}

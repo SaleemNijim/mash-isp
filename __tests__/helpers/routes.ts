@@ -71,6 +71,8 @@ export const PUBLIC_ROUTES = [
   '/login',
   '/register',
   '/verify-email',
+  '/forgot-password',
+  '/reset-password',
   '/subscription-expired',
   '/suspended',
   '/features',

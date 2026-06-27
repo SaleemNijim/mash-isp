@@ -11,6 +11,9 @@ import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
 import { MacAddressField } from '@/components/subscriptions/MacAddressField'
 import { BbCredentialField } from '@/components/subscriptions/BbCredentialField'
+import { PppPlanSelect } from '@/components/subscriptions/PppPlanSelect'
+import { usePppPlans } from '@/hooks/usePppPlans'
+import { findPppPlanBySpeed, type PppPlan } from '@/lib/ppp/plans'
 import {
   isRpcMissingError,
   resolveBbCredentialId,
@@ -117,6 +120,7 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
   )
   const [credentialId, setCredentialId] = useState<string | null>(null)
   const [credentialMode, setCredentialMode] = useState<BbCredentialInputMode>('inventory')
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
   const [manualUsername, setManualUsername] = useState('')
   const [manualPassword, setManualPassword] = useState('')
   const [speed, setSpeed] = useState('')
@@ -172,6 +176,18 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
     if (isCreate && price.trim()) setAmountDue(price)
   }, [isCreate, price])
 
+  // «الباقي» (الدين) يُحسب تلقائياً دائماً = المستحق − نقداً − تطبيق − خصم
+  // يمنع إدخال مبالغ غير متوازنة (مثل 70 مستحق مع 40+20)
+  useEffect(() => {
+    if (isRenew && notifyLater) return
+    const due = Number(amountDue) || 0
+    const cash = Number(cashAmount) || 0
+    const app = Number(appAmount) || 0
+    const discount = Number(discountAmount) || 0
+    const remaining = due - cash - app - discount
+    setBalanceRemaining(String(remaining > 0 ? remaining : 0))
+  }, [isRenew, notifyLater, amountDue, cashAmount, appAmount, discountAmount])
+
   useEffect(() => {
     if (!isRenew || !subscription || renewInitialized) return
     const defaultAmount = subscription.price ?? 0
@@ -186,21 +202,47 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
     setRenewInitialized(true)
   }, [isRenew, subscription, renewInitialized])
 
+  const { data: plans = [] } = usePppPlans()
+
+  const handlePlanChange = (plan: PppPlan | null) => {
+    setSelectedPlanId(plan?.id ?? null)
+    setCredentialId(null)
+    setCredentialMode('inventory')
+    setManualUsername('')
+    setManualPassword('')
+    if (plan) {
+      setSpeed(plan.speed)
+      setPrice(String(plan.price))
+      setAmountDue(String(plan.price))
+      if (isRenew && paymentMethod === 'cash') {
+        setCashAmount(String(plan.price))
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!isRenew || !subscription || selectedPlanId || plans.length === 0) return
+    const match = findPppPlanBySpeed(plans, subscription.speed)
+    if (match) handlePlanChange(match)
+  }, [isRenew, subscription, plans, selectedPlanId])
+
+  useEffect(() => {
+    if (!selectedPlanId || plans.length === 0) return
+    if (!plans.some((p) => p.id === selectedPlanId)) setSelectedPlanId(null)
+  }, [selectedPlanId, plans])
+
   useEffect(() => {
     if (!isRenew || notifyLater) return
     const due = Number(amountDue) || 0
     if (paymentMethod === 'cash') {
       setCashAmount(String(due))
       setAppAmount('0')
-      setBalanceRemaining('0')
     } else if (paymentMethod === 'debt') {
       setCashAmount('0')
       setAppAmount('0')
-      setBalanceRemaining(String(due))
     } else if (isBankPayment(paymentMethod)) {
       setCashAmount('0')
       setAppAmount(String(due))
-      setBalanceRemaining('0')
       const parsed = parsePaymentMethodValue(paymentMethod)
       setBankAccountId(parsed.bankAccountId)
     }
@@ -241,6 +283,10 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['bb-credentials-with-passwords'] }),
       queryClient.invalidateQueries({ queryKey: ['internet_credentials'] }),
+      queryClient.invalidateQueries({ queryKey: ['ppp-plans'] }),
+      queryClient.invalidateQueries({ queryKey: ['bank-accounts-active'] }),
+      queryClient.invalidateQueries({ queryKey: ['payments'] }),
+      queryClient.invalidateQueries({ queryKey: ['sales-today'] }),
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] }),
       queryClient.invalidateQueries({ queryKey: ['subscription-periods'] }),
       queryClient.invalidateQueries({ queryKey: ['debts'] }),
@@ -278,6 +324,10 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
       toast.error('تواريخ البداية والنهاية مطلوبة')
       return
     }
+    if (!selectedPlanId) {
+      toast.error('اختر باقة PPP (السرعة)')
+      return
+    }
 
     const priceNum = price.trim() ? Number(price) : null
     if (price.trim() && (!Number.isFinite(priceNum) || priceNum! < 0)) {
@@ -285,11 +335,33 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
       return
     }
 
+    const appNum = Number(appAmount) || 0
+    if (appNum > 0) {
+      const method = bankAccountId
+        ? (`bank:${bankAccountId}` as PaymentMethodValue)
+        : ('cash' as PaymentMethodValue)
+      const validationError = validatePaymentForm({
+        method,
+        sourceAccountLabel,
+        attachProof,
+        proofFile,
+        requireSourceForBank: true,
+      })
+      if (!bankAccountId) {
+        toast.error('اختر حساب الشركة المستلم للمبلغ عبر التطبيق')
+        return
+      }
+      if (validationError) {
+        toast.error(validationError)
+        return
+      }
+    }
+
     setLoading(true)
     try {
       const resolvedCredentialId = await resolveCredentialForSubmit(customerId)
 
-      const { error } = await supabase.rpc('create_subscription_with_period', {
+      const { data: createdSubscriptionId, error } = await supabase.rpc('create_subscription_with_period', {
         p_customer_id: customerId,
         p_speed: speed.trim() || null,
         p_price: priceNum,
@@ -304,8 +376,26 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
         p_balance_remaining: Number(balanceRemaining) || 0,
         p_paid_at: paidAt.trim() ? new Date(paidAt).toISOString() : null,
         p_credential_id: resolvedCredentialId,
+        p_bank_account_id: appNum > 0 ? bankAccountId : null,
+        p_source_account_label: appNum > 0 ? sourceAccountLabel.trim() || null : null,
       })
       if (error) throw error
+
+      if (attachProof && proofFile && appNum > 0 && createdSubscriptionId) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        const paymentId = await fetchLatestSubscriptionPayment(supabase, createdSubscriptionId)
+        if (paymentId && user) {
+          const proofUrl = await uploadPaymentProof(
+            supabase,
+            tenant.id,
+            `subscription/${createdSubscriptionId}`,
+            proofFile,
+          )
+          await attachProofToPayment(supabase, tenant.id, paymentId, proofUrl, user.id)
+        }
+      }
 
       await invalidateCaches()
       toast.success('تم إنشاء الاشتراك وحجز username')
@@ -331,13 +421,8 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
       return
     }
 
-    if (!notifyLater && paymentMethod === 'electronic' && !bankAccountId) {
-      toast.error('الدفع الإلكتروني يتطلب اختيار حساب بنكي')
-      return
-    }
-
-    if (!notifyLater && paymentMethod === 'electronic' && !proofFile) {
-      toast.error('يجب إرفاق إشعار الدفع')
+    if (!notifyLater && !selectedPlanId) {
+      toast.error('اختر باقة PPP (السرعة)')
       return
     }
 
@@ -382,20 +467,28 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
       }
 
       const method = toDbPaymentMethod(paymentMethod)
-      const paidTotal = due - (Number(discountAmount) || 0)
+      const cash = Number(cashAmount) || 0
+      const app = Number(appAmount) || 0
+      const discount = Number(discountAmount) || 0
+      const remaining = Number(balanceRemaining) || 0
+
+      if (app > 0 && !isBankPayment(paymentMethod)) {
+        toast.error('مبلغ التطبيق يتطلب اختيار حساب بنكي')
+        return
+      }
 
       const rpcParams = {
         p_subscription_id: subscription.id,
         p_credential_id: resolvedCredentialId!,
-        p_amount: paidTotal,
+        p_amount: due,
         p_method: method,
         p_bank_account_id: parsed.bankAccountId,
         p_nonce: crypto.randomUUID(),
         p_mac_address: macAddress.trim() || null,
-        p_cash_amount: Number(cashAmount) || 0,
-        p_app_amount: Number(appAmount) || 0,
-        p_discount_amount: Number(discountAmount) || 0,
-        p_balance_remaining: Number(balanceRemaining) || 0,
+        p_cash_amount: cash,
+        p_app_amount: app,
+        p_discount_amount: discount,
+        p_balance_remaining: remaining,
         p_notes: notes.trim() || null,
         p_source_account_label: sourceAccountLabel.trim() || null,
       }
@@ -404,7 +497,7 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
         await enqueueOp('renew_subscription', {
           subscription_id: subscription.id,
           credential_id: rpcParams.p_credential_id,
-          amount: paidTotal,
+          amount: due,
           method,
           bank_account_id: rpcParams.p_bank_account_id,
           mac_address: rpcParams.p_mac_address,
@@ -538,9 +631,19 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
                     value={speed}
                     onChange={(e) => setSpeed(e.target.value)}
                     placeholder="4M"
-                    disabled={loading}
+                    disabled={loading || !!selectedPlanId}
+                    readOnly={!!selectedPlanId}
                   />
                 </Field>
+
+                <div className="md:col-span-2">
+                  <PppPlanSelect
+                    value={selectedPlanId}
+                    onChange={handlePlanChange}
+                    disabled={loading}
+                    required
+                  />
+                </div>
 
                 <Field label="سعر الاشتراك (ش)" id="subPrice">
                   <Input
@@ -586,9 +689,9 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <ReadOnlyField label="المشترك" value={customerName ?? '—'} />
-                <ReadOnlyField label="السرعة" value={subscription?.speed ?? '—'} />
+                <ReadOnlyField label="السرعة الحالية" value={subscription?.speed ?? '—'} />
                 <ReadOnlyField
-                  label="السعر"
+                  label="السعر الحالي"
                   value={formatMoney(subscription?.price)}
                 />
                 <ReadOnlyField
@@ -601,6 +704,14 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
                     subscription?.end_date ? addMonthISO(subscription.end_date) : null,
                   )}
                 />
+                <div className="md:col-span-2">
+                  <PppPlanSelect
+                    value={selectedPlanId}
+                    onChange={handlePlanChange}
+                    disabled={loading || notifyLater}
+                    required={!notifyLater}
+                  />
+                </div>
               </div>
             )}
           </FormSection>
@@ -616,6 +727,7 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
                 manualPassword={manualPassword}
                 onManualUsernameChange={setManualUsername}
                 onManualPasswordChange={setManualPassword}
+                planId={selectedPlanId}
                 disabled={loading}
               />
             </FormSection>
@@ -671,10 +783,11 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
                   disabled={paymentDisabled}
                 />
                 <NumField
-                  label="الباقي"
+                  label="الباقي (دين)"
                   value={balanceRemaining}
                   onChange={setBalanceRemaining}
                   disabled={paymentDisabled}
+                  readOnly
                 />
                 {isCreate ? (
                   <div className="space-y-1.5 col-span-2 md:col-span-1">
@@ -825,11 +938,13 @@ function NumField({
   value,
   onChange,
   disabled,
+  readOnly,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   disabled?: boolean
+  readOnly?: boolean
 }) {
   return (
     <div className="space-y-1.5">
@@ -840,6 +955,7 @@ function NumField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
+        readOnly={readOnly}
         dir="ltr"
         className="text-right tabular-nums bg-background"
       />

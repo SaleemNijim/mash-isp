@@ -103,7 +103,7 @@ export function MacHistoryModal({
           )}
 
           {!isLoading && history.length > 0 && (
-            <table className="w-full text-sm">
+            <table className="mash-data-table">
               <thead>
                 <tr className="border-b text-muted-foreground">
                   <th className="py-2 px-2 text-right font-medium">التاريخ</th>
@@ -114,7 +114,7 @@ export function MacHistoryModal({
               </thead>
               <tbody>
                 {history.map((row) => (
-                  <tr key={row.id} className="border-b border-gray-100">
+                  <tr key={row.id} className="border-b border-mash-row-border">
                     <td className="py-2 px-2 tabular-nums whitespace-nowrap">
                       {formatDateTime(row.changed_at)}
                     </td>

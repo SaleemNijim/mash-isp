@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 
 interface Plan {
   id: string
-  slug: string
   name: string
   billing_cycle: string
   price_monthly: number | null
@@ -24,31 +23,45 @@ interface Props {
 
 export function UpgradeModal({ open, onClose }: Props) {
   const [plans, setPlans] = useState<Plan[]>([])
-  const [selected, setSelected] = useState<string>('pro_annual')
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const { data: tenant } = useTenant()
-  const supabase = createClient()
 
   useEffect(() => {
     if (!open) return
+    let cancelled = false
+    const supabase = createClient()
     supabase
       .from('subscription_plans')
-      .select('id,slug,name,billing_cycle,price_monthly,price_annual,discount_percent')
+      .select('id,name,billing_cycle,price_monthly,price_annual,discount_percent')
       .in('billing_cycle', ['monthly', 'annual'])
       .eq('is_active', true)
-      .then(({ data }) => setPlans(data ?? []))
+      .then(({ data }) => {
+        if (cancelled) return
+        const nextPlans = data ?? []
+        setPlans(nextPlans)
+        setSelectedPlanId((current) => {
+          if (current && nextPlans.some((plan) => plan.id === current)) return current
+          return nextPlans.find((plan) => plan.billing_cycle === 'annual')?.id ?? nextPlans[0]?.id ?? ''
+        })
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [open])
 
   const monthlyPlan = plans.find(p => p.billing_cycle === 'monthly')
   const annualPlan  = plans.find(p => p.billing_cycle === 'annual')
 
-  async function handleUpgrade(slug: string) {
+  async function handleUpgrade(planId: string) {
     if (!tenant) return
-    const plan = plans.find(p => p.slug === slug)
+    const plan = plans.find(p => p.id === planId)
     if (!plan) return
 
     setLoading(true)
     try {
+      const supabase = createClient()
       const amount =
         plan.billing_cycle === 'annual'
           ? (plan.price_annual ?? 0)
@@ -86,27 +99,27 @@ export function UpgradeModal({ open, onClose }: Props) {
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent dir="rtl">
-        <h2 className="text-xl font-bold mb-4">اختر خطة الاشتراك</h2>
+        <h2 className="text-xl font-bold text-foreground mb-4">اختر خطة الاشتراك</h2>
 
         {/* Pro Monthly */}
         {monthlyPlan && (
           <label
-            className={`flex items-center gap-3 border-2 rounded-xl p-4 cursor-pointer ${
-              selected === 'pro_monthly' ? 'border-blue-600' : 'border-gray-200'
+            className={`flex items-center gap-3 border-2 rounded-xl p-4 cursor-pointer transition-colors ${
+              selectedPlanId === monthlyPlan.id ? 'border-primary bg-primary-50' : 'border-border bg-card hover:border-primary-400'
             }`}
           >
             <input
               type="radio"
               name="plan"
-              value="pro_monthly"
-              checked={selected === 'pro_monthly'}
-              onChange={() => setSelected('pro_monthly')}
+              value={monthlyPlan.id}
+              checked={selectedPlanId === monthlyPlan.id}
+              onChange={() => setSelectedPlanId(monthlyPlan.id)}
             />
             <div>
-              <div className="font-bold">شهري</div>
-              <div className="text-2xl font-bold text-blue-700">
-                ${monthlyPlan.price_monthly}
-                <span className="text-sm font-normal text-gray-500">/شهر</span>
+              <div className="font-bold text-foreground">{monthlyPlan.name}</div>
+              <div className="text-2xl font-bold text-primary-600">
+                {monthlyPlan.price_monthly} ₪
+                <span className="text-sm font-normal text-muted-foreground">/شهر</span>
               </div>
             </div>
           </label>
@@ -115,32 +128,32 @@ export function UpgradeModal({ open, onClose }: Props) {
         {/* Pro Annual — يعرض التوفير */}
         {annualPlan && (
           <label
-            className={`flex items-center gap-3 border-2 rounded-xl p-4 cursor-pointer relative mt-3 ${
-              selected === 'pro_annual' ? 'border-blue-600' : 'border-gray-200'
+            className={`flex items-center gap-3 border-2 rounded-xl p-4 cursor-pointer relative mt-3 transition-colors ${
+              selectedPlanId === annualPlan.id ? 'border-primary bg-primary-50' : 'border-border bg-card hover:border-primary-400'
             }`}
           >
             {annualPlan.discount_percent && (
-              <span className="absolute -top-3 right-4 bg-green-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+              <span className="absolute -top-3 right-4 bg-primary text-primary-foreground text-xs font-bold px-2 py-0.5 rounded-full">
                 وفِّر {annualPlan.discount_percent}%
               </span>
             )}
             <input
               type="radio"
               name="plan"
-              value="pro_annual"
-              checked={selected === 'pro_annual'}
-              onChange={() => setSelected('pro_annual')}
+              value={annualPlan.id}
+              checked={selectedPlanId === annualPlan.id}
+              onChange={() => setSelectedPlanId(annualPlan.id)}
             />
             <div>
-              <div className="font-bold">سنوي</div>
-              <div className="text-2xl font-bold text-blue-700">
-                ${annualPlan.price_annual}
-                <span className="text-sm font-normal text-gray-500">/سنة</span>
+              <div className="font-bold text-foreground">{annualPlan.name}</div>
+              <div className="text-2xl font-bold text-primary-600">
+                {annualPlan.price_annual} ₪
+                <span className="text-sm font-normal text-muted-foreground">/سنة</span>
               </div>
               {annualPlan.discount_percent && (
-                <div className="text-xs text-green-600 mt-1">
-                  تدفع ${annualPlan.price_annual} بدلاً من $
-                  {((annualPlan.price_monthly ?? 0) * 12).toFixed(0)} سنوياً
+                <div className="text-xs text-mash-success-text mt-1">
+                  تدفع {annualPlan.price_annual} ₪ بدلاً من{' '}
+                  {((annualPlan.price_monthly ?? 0) * 12).toFixed(0)} ₪ سنوياً
                 </div>
               )}
             </div>
@@ -148,9 +161,9 @@ export function UpgradeModal({ open, onClose }: Props) {
         )}
 
         <Button
-          className="w-full mt-4"
-          disabled={loading}
-          onClick={() => handleUpgrade(selected)}
+          className="w-full mt-4 min-h-11"
+          disabled={loading || !selectedPlanId}
+          onClick={() => handleUpgrade(selectedPlanId)}
         >
           {loading ? 'جاري المعالجة...' : 'اشترك الآن'}
         </Button>

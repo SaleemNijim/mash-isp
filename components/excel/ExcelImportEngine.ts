@@ -7,6 +7,14 @@
 
 import ExcelJS from 'exceljs'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  isPppPlaceholderRow,
+  parsePackageLabel,
+} from '@/lib/ppp/plans'
+import {
+  getDistributorSheet,
+  validateDistributorTemplate,
+} from '@/lib/excel/distributors-template'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public Types
@@ -20,6 +28,7 @@ export type ImportType =
   | 'network_routers'
   | 'card_inventory'
   | 'card_distributor_sales'
+  | 'distributors'
 
 export interface ImportError {
   row: number
@@ -66,6 +75,7 @@ const TYPE_SIGNATURES: Record<ImportType, string[][]> = {
   broadband_credentials: [
     ['username', 'يوزر', 'اسم المستخدم', 'user', 'مستخدم'],
     ['password', 'كلمة المرور', 'باسورد', 'pass'],
+    ['package', 'باقة', 'الباقة', 'السرعة', 'speed'],
   ],
   we_subscribers: [
     ['we_number', 'رقم we', 'رقم_we', 'حساب we', 'رقم الـ we'],
@@ -87,6 +97,10 @@ const TYPE_SIGNATURES: Record<ImportType, string[][]> = {
   card_distributor_sales: [
     ['distributor_name', 'اسم الموزع', 'الموزع'],
     ['commission_percent', 'نسبة العمولة', 'عمولة', 'commission'],
+  ],
+  distributors: [
+    ['أسماءالموزعين', 'اسمالموزعين', 'اسماءالموزعين'],
+    ['رقمالهاتف', 'هاتف', 'phone'],
   ],
 }
 
@@ -254,7 +268,7 @@ export function detectImportType(sheet: ExcelJS.Worksheet): ImportType | null {
 // Private Handlers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** broadband_credentials — §5.5: red background → is_used=true */
+/** broadband_credentials — §5.5: red background → is_used=true; package → ppp_plan */
 async function importBroadbandCredentials(
   sheet: ExcelJS.Worksheet,
   tenantId: string,
@@ -264,6 +278,7 @@ async function importBroadbandCredentials(
   const usernameCol = findCol(headers, ['username', 'يوزر', 'اسم المستخدم', 'user', 'مستخدم'])
   const passwordCol = findCol(headers, ['password', 'كلمة المرور', 'باسورد', 'pass'])
   const typeCol     = findCol(headers, ['type', 'نوع', 'النوع', 'نوع الخدمة'])
+  const packageCol  = findCol(headers, ['package', 'باقة', 'الباقة', 'السرعة', 'speed'])
 
   const errors: ImportError[] = []
   const seenInFile = new Set<string>()
@@ -271,7 +286,6 @@ async function importBroadbandCredentials(
   let total = 0
   let skipped = 0
 
-  // Collect all sheet usernames for a single bulk DB lookup
   const sheetUsernames: string[] = []
   sheet.eachRow((row, rowNum) => {
     if (rowNum === 1) return
@@ -279,7 +293,6 @@ async function importBroadbandCredentials(
     if (u) sheetUsernames.push(u)
   })
 
-  // Bulk fetch existing usernames to avoid N+1 queries
   const dbSet = new Set<string>()
   if (sheetUsernames.length > 0) {
     const { data } = await supabase
@@ -291,37 +304,79 @@ async function importBroadbandCredentials(
     data?.forEach(r => dbSet.add(r.username as string))
   }
 
+  const planIdCache = new Map<string, string>()
+
+  async function resolvePlanId(packageRaw: string): Promise<string | null> {
+    const parsed = parsePackageLabel(packageRaw)
+    if (!parsed) return null
+    const cacheKey = parsed.name
+    if (planIdCache.has(cacheKey)) return planIdCache.get(cacheKey)!
+
+    const { data, error } = await supabase.rpc('ensure_ppp_plan', {
+      p_name: parsed.name,
+      p_speed: parsed.speed,
+      p_price: 0,
+      p_batch_number: null,
+    })
+    if (error) throw new Error(`ensure_ppp_plan: ${error.message}`)
+    planIdCache.set(cacheKey, data as string)
+    return data as string
+  }
+
+  const pendingRows: { rowNum: number; row: ExcelJS.Row }[] = []
   sheet.eachRow((row, rowNum) => {
     if (rowNum === 1) return
+    pendingRows.push({ rowNum, row })
+  })
+
+  for (const { rowNum, row } of pendingRows) {
     total++
 
     const username = cellStr(row, usernameCol)
     const password = cellStr(row, passwordCol)
+    const packageRaw = packageCol !== -1 ? cellStr(row, packageCol) : ''
 
     if (!username) {
       errors.push({ row: rowNum, reason: 'username فارغ' })
       skipped++
-      return
+      continue
     }
 
-    // Duplicate within file → skip
+    if (isPppPlaceholderRow(username, password)) {
+      skipped++
+      continue
+    }
+
     if (seenInFile.has(username)) {
       errors.push({ row: rowNum, reason: `username مكرر داخل الملف: ${username}` })
       skipped++
-      return
+      continue
     }
 
-    // Already exists in DB → skip
     if (dbSet.has(username)) {
       errors.push({ row: rowNum, reason: `username موجود في قاعدة البيانات: ${username}` })
       skipped++
-      return
+      continue
     }
 
     seenInFile.add(username)
 
     const credType = typeCol !== -1 ? (cellStr(row, typeCol) || 'bb') : 'bb'
-    const isUsed = isRedBackground(row) // §5.5
+    const isUsed = isRedBackground(row)
+
+    let planId: string | null = null
+    if (packageRaw.trim()) {
+      try {
+        planId = await resolvePlanId(packageRaw)
+      } catch (err) {
+        errors.push({
+          row: rowNum,
+          reason: err instanceof Error ? err.message : 'فشل إنشاء الباقة',
+        })
+        skipped++
+        continue
+      }
+    }
 
     validRows.push({
       tenant_id: tenantId,
@@ -330,8 +385,9 @@ async function importBroadbandCredentials(
       type: credType,
       is_used: isUsed,
       is_deleted: false,
+      plan_id: planId,
     })
-  })
+  }
 
   if (validRows.length > 0) {
     await supabase.rpc('bulk_insert_credentials', { p_rows: validRows })
@@ -656,7 +712,14 @@ async function importCardInventory(
   const denomCol     = findCol(headers, ['denomination', 'الفئة', 'القيمة', 'فئة'])
   const quantityCol  = findCol(headers, ['quantity', 'الكمية', 'كمية', 'الكمية المتاحة'])
   const costPriceCol = findCol(headers, ['cost_price', 'سعر التكلفة', 'التكلفة', 'تكلفة'])
-  const salePriceCol = findCol(headers, ['sale_price', 'سعر البيع', 'البيع', 'بيع'])
+  const salePriceCol = findCol(headers, ['sale_price', 'سعر البيع', 'البيع', 'بيع', 'تجزئة', 'سعر التجزئة'])
+  const distributorPriceCol = findCol(headers, [
+    'distributor_price',
+    'سعر الموزع',
+    'موزع',
+    'سعر خصم الموزع',
+    'خصم الموزع',
+  ])
   const minQtyCol    = findCol(headers, ['min_quantity', 'الحد الأدنى', 'الحد الادنى', 'حد أدنى'])
 
   const errors: ImportError[] = []
@@ -709,6 +772,7 @@ async function importCardInventory(
       quantity_in_stock: cellNum(row, quantityCol) ?? 0,
       cost_price: cellNum(row, costPriceCol),
       sale_price: cellNum(row, salePriceCol),
+      distributor_price: cellNum(row, distributorPriceCol),
       min_quantity: cellNum(row, minQtyCol) ?? 0,
       is_deleted: false,
     }
@@ -787,6 +851,89 @@ async function importCardDistributorSales(
   return { total, inserted: validRows.length, updated: 0, skipped, errors }
 }
 
+async function importDistributors(
+  sheet: ExcelJS.Worksheet,
+  tenantId: string,
+  supabase: SupabaseClient,
+): Promise<ImportResult> {
+  const templateError = validateDistributorTemplate(sheet)
+  if (templateError) throw new Error(templateError)
+
+  const errors: ImportError[] = []
+  const seenInFile = new Set<string>()
+  const pendingRows: Array<{
+    rowNum: number
+    name: string
+    phone: string | null
+    address: string | null
+    notes: string | null
+  }> = []
+  let total = 0
+  let skipped = 0
+
+  sheet.eachRow((row, rowNum) => {
+    if (rowNum === 1) return
+
+    const name = cellStr(row, 1)
+    const phone = cellStr(row, 2) || null
+    const address = cellStr(row, 3) || null
+    const notes = cellStr(row, 4) || null
+
+    if (!name && !phone && !address && !notes) return
+
+    total++
+    if (!name) {
+      errors.push({ row: rowNum, reason: 'اسم الموزع فارغ' })
+      skipped++
+      return
+    }
+
+    const nameKey = name.toLowerCase()
+    if (seenInFile.has(nameKey)) {
+      errors.push({ row: rowNum, reason: `اسم الموزع مكرر داخل الملف: ${name}` })
+      skipped++
+      return
+    }
+    seenInFile.add(nameKey)
+    pendingRows.push({ rowNum, name, phone, address, notes })
+  })
+
+  const uniqueNames = [...new Set(pendingRows.map((r) => r.name))]
+  const dbSet = new Set<string>()
+  if (uniqueNames.length > 0) {
+    const { data } = await supabase
+      .from('distributors')
+      .select('name')
+      .eq('tenant_id', tenantId)
+      .eq('is_deleted', false)
+      .in('name', uniqueNames)
+    data?.forEach((r) => dbSet.add((r.name as string).toLowerCase()))
+  }
+
+  const validRows: Record<string, unknown>[] = []
+  for (const row of pendingRows) {
+    if (dbSet.has(row.name.toLowerCase())) {
+      errors.push({ row: row.rowNum, reason: `الموزع مسجّل مسبقاً: ${row.name}` })
+      skipped++
+      continue
+    }
+    validRows.push({
+      tenant_id: tenantId,
+      name: row.name,
+      phone: row.phone,
+      address: row.address,
+      notes: row.notes,
+      is_deleted: false,
+    })
+  }
+
+  if (validRows.length > 0) {
+    await batchInsert(supabase, 'distributors', validRows)
+  }
+
+  return { total, inserted: validRows.length, updated: 0, skipped, errors }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Private: logImportResult
 // ─────────────────────────────────────────────────────────────────────────────
@@ -831,13 +978,18 @@ async function logImportResult(
  *         the returned `errors` array and counted as `skipped`.
  */
 export async function processImport(options: ImportOptions): Promise<ImportResult> {
-  const { workbook, tenantId, performedBy, fileName, supabase } = options
-  const sheet = workbook.worksheets[0]
+  const { workbook, tenantId, performedBy, fileName, supabase, importType: explicitType } =
+    options
+
+  const sheet =
+    explicitType === 'distributors'
+      ? getDistributorSheet(workbook)
+      : workbook.worksheets[0]
 
   if (!sheet) throw new Error('الملف لا يحتوي على أي ورقة عمل')
 
-  const importType = options.importType ?? detectImportType(sheet)
-  if (!importType) {
+  const resolvedType = explicitType ?? detectImportType(sheet)
+  if (!resolvedType) {
     throw new Error(
       'تعذّر تحديد نوع الاستيراد من أسماء الأعمدة — تأكد من وجود ترويسة في الصف الأول',
     )
@@ -845,7 +997,7 @@ export async function processImport(options: ImportOptions): Promise<ImportResul
 
   let result: ImportResult
 
-  switch (importType) {
+  switch (resolvedType) {
     case 'broadband_credentials':
       result = await importBroadbandCredentials(sheet, tenantId, supabase)
       break
@@ -867,9 +1019,12 @@ export async function processImport(options: ImportOptions): Promise<ImportResul
     case 'card_distributor_sales':
       result = await importCardDistributorSales(sheet, tenantId, supabase)
       break
+    case 'distributors':
+      result = await importDistributors(sheet, tenantId, supabase)
+      break
   }
 
-  await logImportResult(supabase, tenantId, performedBy, fileName, importType, result)
+  await logImportResult(supabase, tenantId, performedBy, fileName, resolvedType, result)
 
   return result
 }

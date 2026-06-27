@@ -12,7 +12,7 @@ export function DataPanel({ children, className, noPadding }: DataPanelProps) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-border bg-card shadow-sm overflow-hidden',
+        'rounded-2xl border border-[#D1E8E2] bg-card shadow-[0_2px_12px_rgba(15,110,86,0.06)] overflow-hidden',
         !noPadding && 'p-0',
         className,
       )}

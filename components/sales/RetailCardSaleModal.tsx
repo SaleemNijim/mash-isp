@@ -205,7 +205,7 @@ export function RetailCardSaleModal({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>سعر البيع</Label>
+              <Label>سعر التجزئة</Label>
               <Input
                 type="number"
                 min={0}

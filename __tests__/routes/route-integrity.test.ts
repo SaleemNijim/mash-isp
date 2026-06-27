@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DASHBOARD_NAV } from '@/lib/navigation'
+import { DASHBOARD_NAV, ROUTES } from '@/lib/navigation'
 import {
   APP_DIR,
   PROJECT_ROOT,
@@ -43,8 +43,16 @@ describe('STATIC_ROUTE_MANIFEST', () => {
       '/login',
       '/register',
       '/dashboard',
+      '/customers',
       '/subscriptions',
+      '/network/routers',
+      '/network/ports',
+      '/distributors',
       '/card-inventory',
+      '/reports',
+      '/audit-log',
+      '/recycle-bin',
+      '/settings',
       '/super-admin/tenants',
       '/super-admin/plans',
       '/super-admin/invoices',
@@ -52,6 +60,12 @@ describe('STATIC_ROUTE_MANIFEST', () => {
       '/subscription-expired',
     ]) {
       expect(STATIC_ROUTE_MANIFEST, `missing ${route}`).toContain(route)
+    }
+  })
+
+  it('every ROUTES constant resolves to a page route', () => {
+    for (const [key, href] of Object.entries(ROUTES)) {
+      expect(STATIC_ROUTE_MANIFEST, `ROUTES.${key} → ${href}`).toContain(href)
     }
   })
 })
@@ -95,6 +109,7 @@ describe('INTERNAL_LINKS_TEST', () => {
 
       if (isPublicRoute(base)) continue
       if (STATIC_ROUTE_MANIFEST.includes(base)) continue
+      if (ALL_APP_ROUTES.includes(base)) continue
 
       // query-only patterns like /register?error=setup_incomplete
       if (href.includes('?') && isPublicRoute(base)) continue

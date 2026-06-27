@@ -9,7 +9,12 @@ import {
   TENANT_USER_PERMISSIONS_QUERY_KEY,
   useTenantUsers,
 } from '@/hooks/useTenantUsers'
-import { PERMISSION_CODES, PERMISSION_LABELS, type PermissionCode } from '@/lib/permissions'
+import { usePermissions } from '@/hooks/usePermissions'
+import {
+  PERMISSION_GROUPS,
+  PERMISSION_LABELS,
+  type PermissionCode,
+} from '@/lib/permissions'
 
 function mapPermissionRpcError(message: string): string {
   if (message.includes('not_authorized')) return 'غير مصرّح — فقط مدير الشركة'
@@ -20,6 +25,11 @@ function mapPermissionRpcError(message: string): string {
 }
 
 export function PermissionMatrix() {
+  const role = usePermissions((s) => s.role)
+  const hasPermission = usePermissions((s) => s.hasPermission)
+  const canEditMatrix =
+    role === 'admin' || role === 'super_admin' || hasPermission('manage_permissions')
+
   const { data: users = [], isLoading: loadingUsers } = useTenantUsers()
   const employees = useMemo(
     () => users.filter((u) => u.role === 'employee'),
@@ -54,6 +64,11 @@ export function PermissionMatrix() {
   const loading = loadingUsers || (employees.length > 0 && loadingPerms)
 
   const toggle = async (userId: string, permission: PermissionCode) => {
+    if (!canEditMatrix) {
+      toast.error('ليس لديك صلاحية تعديل صلاحيات الآخرين')
+      return
+    }
+
     const key = `${userId}:${permission}`
     setToggling(key)
 
@@ -95,71 +110,84 @@ export function PermissionMatrix() {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card" dir="rtl">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-muted/40 border-b border-border">
-            <th className="sticky right-0 bg-muted/40 px-4 py-3 text-right font-semibold text-foreground min-w-[140px]">
-              المستخدم
-            </th>
-            {PERMISSION_CODES.map((perm) => (
-              <th
-                key={perm}
-                className="px-2 py-3 text-center font-medium text-muted-foreground min-w-[88px] text-xs leading-tight"
-              >
-                {PERMISSION_LABELS[perm]}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {employees.map((user, idx) => (
-            <tr
-              key={user.id}
-              className={`border-b border-border last:border-0 transition-colors hover:bg-muted/20 ${
-                idx % 2 === 0 ? 'bg-card' : 'bg-muted/5'
-              }`}
-            >
-              <td className="sticky right-0 bg-inherit px-4 py-3 font-medium text-foreground">
-                {user.name}
-              </td>
-              {PERMISSION_CODES.map((perm) => {
-                const key = `${user.id}:${perm}`
-                const checked = userPerms[user.id]?.has(perm) ?? false
-                const busy = toggling === key
+    <div className="space-y-6" dir="rtl">
+      {!canEditMatrix && (
+        <p className="text-sm text-mash-warning-text bg-mash-warning-bg border border-mash-warning-bg rounded-lg px-4 py-2">
+          يمكنك عرض الصلاحيات فقط — لتعديلها تحتاج صلاحية «تعديل صلاحيات الآخرين».
+        </p>
+      )}
 
-                return (
-                  <td key={perm} className="px-2 py-3 text-center">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={checked}
-                      aria-label={`${PERMISSION_LABELS[perm]} — ${user.name}`}
-                      onClick={() => void toggle(user.id, perm)}
-                      disabled={busy}
-                      className={[
-                        'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent',
-                        'transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2',
-                        'focus-visible:ring-ring focus-visible:ring-offset-2',
-                        checked ? 'bg-primary' : 'bg-input',
-                        busy ? 'opacity-50 cursor-wait' : 'cursor-pointer',
-                      ].join(' ')}
-                    >
-                      <span
-                        className={[
-                          'pointer-events-none block h-4 w-4 rounded-full bg-background shadow-sm',
-                          'transition-transform duration-200',
-                          checked ? '-translate-x-4' : 'translate-x-0',
-                        ].join(' ')}
-                      />
-                    </button>
+      {PERMISSION_GROUPS.map((group) => (
+        <div key={group.id} className="overflow-x-auto rounded-lg border border-border bg-card">
+          <div className="border-b border-border bg-muted/30 px-4 py-2.5">
+            <h3 className="text-sm font-semibold text-foreground">{group.label}</h3>
+          </div>
+          <table className="mash-data-table">
+            <thead>
+              <tr className="bg-muted/40 border-b border-border">
+                <th className="sticky right-0 bg-muted/40 px-4 py-3 text-right font-semibold text-foreground min-w-[140px]">
+                  المستخدم
+                </th>
+                {group.codes.map((perm) => (
+                  <th
+                    key={perm}
+                    className="px-2 py-3 text-center font-medium text-muted-foreground min-w-[96px] text-xs leading-tight"
+                  >
+                    {PERMISSION_LABELS[perm]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {employees.map((user, idx) => (
+                <tr
+                  key={`${group.id}-${user.id}`}
+                  className={`border-b border-border last:border-0 transition-colors hover:bg-muted/20 ${
+                    idx % 2 === 0 ? 'bg-card' : 'bg-muted/5'
+                  }`}
+                >
+                  <td className="sticky right-0 bg-inherit px-4 py-3 font-medium text-foreground">
+                    {user.name}
                   </td>
-                )
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                  {group.codes.map((perm) => {
+                    const key = `${user.id}:${perm}`
+                    const checked = userPerms[user.id]?.has(perm) ?? false
+                    const busy = toggling === key
+
+                    return (
+                      <td key={perm} className="px-2 py-3 text-center">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={checked}
+                          aria-label={`${PERMISSION_LABELS[perm]} — ${user.name}`}
+                          onClick={() => void toggle(user.id, perm)}
+                          disabled={busy || !canEditMatrix}
+                          className={[
+                            'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent',
+                            'transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2',
+                            'focus-visible:ring-ring focus-visible:ring-offset-2',
+                            checked ? 'bg-primary' : 'bg-input',
+                            busy ? 'opacity-50 cursor-wait' : canEditMatrix ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed',
+                          ].join(' ')}
+                        >
+                          <span
+                            className={[
+                              'pointer-events-none block h-4 w-4 rounded-full bg-background shadow-sm',
+                              'transition-transform duration-200',
+                              checked ? '-translate-x-4' : 'translate-x-0',
+                            ].join(' ')}
+                          />
+                        </button>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
     </div>
   )
 }

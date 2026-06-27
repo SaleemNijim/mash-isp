@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { AlertTriangle, Clock, CreditCard, Users } from 'lucide-react'
+import { AlertTriangle, ClipboardList, Clock, CreditCard, Users } from 'lucide-react'
 
 export interface DashboardAlert {
   id: string
@@ -15,32 +15,37 @@ interface AlertsPanelProps {
 
 const SEVERITY_STYLES = {
   critical: {
-    dot: 'bg-red-500',
-    border: 'border-red-200 bg-red-50',
-    text: 'text-red-800',
-    icon: 'text-red-600',
+    dot: 'bg-destructive',
+    border: 'border-mash-danger-bg bg-mash-danger-bg',
+    text: 'text-mash-danger-text',
+    icon: 'text-mash-danger-text',
   },
   warning: {
-    dot: 'bg-amber-500',
-    border: 'border-amber-200 bg-amber-50',
-    text: 'text-amber-800',
-    icon: 'text-amber-600',
+    dot: 'bg-mash-warning-text',
+    border: 'border-mash-warning-bg bg-mash-warning-bg',
+    text: 'text-mash-warning-text',
+    icon: 'text-mash-warning-text',
   },
 } as const
 
 const ALERT_ICONS = {
   'expiring-today': Clock,
   'overdue-tasks': AlertTriangle,
-  'bb-low': Users,
+  'pending-followup': ClipboardList,
   'cards-low': CreditCard,
 } as const
+
+function alertIcon(id: string) {
+  if (id.startsWith('ppp-low-')) return Users
+  return ALERT_ICONS[id as keyof typeof ALERT_ICONS] ?? AlertTriangle
+}
 
 export function AlertsPanel({ alerts }: AlertsPanelProps) {
   if (alerts.length === 0) {
     return (
       <div
         dir="rtl"
-        className="rounded-xl border border-green-200 bg-green-50 px-4 py-6 text-center text-sm text-green-800"
+        className="rounded-2xl border border-[#D1E8E2] bg-[#E8F5F1] px-4 py-6 text-center text-sm font-medium text-[#0F6E56]"
       >
         لا توجد تنبيهات حرجة — كل شيء يبدو طبيعياً.
       </div>
@@ -49,16 +54,15 @@ export function AlertsPanel({ alerts }: AlertsPanelProps) {
 
   return (
     <div dir="rtl" className="space-y-3">
-      <h2 className="text-base font-semibold text-gray-900">التنبيهات</h2>
+      <h2 className="text-base font-bold text-[#0D1F1A]">التنبيهات</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         {alerts.map((alert) => {
           const styles = SEVERITY_STYLES[alert.severity]
-          const Icon =
-            ALERT_ICONS[alert.id as keyof typeof ALERT_ICONS] ?? AlertTriangle
+          const Icon = alertIcon(alert.id)
 
           const content = (
             <div
-              className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${styles.border}`}
+              className={`flex items-start gap-3 rounded-2xl border px-4 py-3 shadow-sm ${styles.border}`}
             >
               <span
                 className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${styles.dot}`}

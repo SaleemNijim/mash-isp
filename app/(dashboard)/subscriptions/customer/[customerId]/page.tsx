@@ -178,7 +178,7 @@ export default function CustomerSubscriptionHistoryPage() {
 
       <DataPanel noPadding className="flex-1 flex flex-col min-h-0 w-full">
         <div className="flex-1 w-full overflow-x-auto">
-          <table className="w-full min-w-full text-sm border-collapse table-auto">
+          <table className="mash-data-table min-w-full table-auto">
             <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm">
               <tr>
                 <th className={cn(thClass, 'w-[7%]')}>username</th>

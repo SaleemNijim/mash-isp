@@ -48,7 +48,7 @@ export function CardPriceBreakdown({
         <span>{formatMoney(preview.listPrice)}</span>
       </div>
       {preview.discountPercent > 0 && (
-        <div className="flex justify-between gap-2 tabular-nums text-emerald-700">
+        <div className="flex justify-between gap-2 tabular-nums text-mash-success-text">
           <span>خصم</span>
           <span>
             {formatMoney(preview.discountAmount)} ({formatPercent(preview.discountPercent)})

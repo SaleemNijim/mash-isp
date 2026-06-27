@@ -15,9 +15,22 @@ import { useInfiniteVirtualData } from '@/hooks/useInfiniteVirtualData'
 import { useDeleteConfirm } from '@/hooks/useDeleteConfirm'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import { DeleteConfirmModal } from '@/components/shared/DeleteConfirmModal'
+import { DataPanel } from '@/components/shared/DataPanel'
 import { ReceiveBatchModal } from '@/components/cards/ReceiveBatchModal'
 import { EditBatchModal } from '@/components/cards/EditBatchModal'
 import { type CardBatchRow } from '@/lib/cards/types'
+import {
+  MASH_TABLE,
+  MASH_TABLE_SCROLL,
+  MASH_TH,
+  MASH_TH_CENTER,
+  MASH_TH_ACTIONS,
+  MASH_TD,
+  MASH_TD_CODE,
+  MASH_TD_AMOUNT,
+  MASH_TD_ACTIONS,
+  MASH_EMPTY_ROW,
+} from '@/lib/ui/mash-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -214,46 +227,32 @@ export function BatchesTab() {
         />
       </div>
 
+      <DataPanel noPadding>
       <div
         ref={containerRef}
-        className="overflow-auto border border-gray-200 rounded-lg bg-white"
+        className={MASH_TABLE_SCROLL}
         style={{ height: 'calc(100vh - 360px)', minHeight: 320 }}
       >
-        <table
-          className="w-full text-sm border-collapse table-fixed"
-          style={{ minWidth: 720 }}
-        >
-          <colgroup>
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '18%' }} />
-            <col style={{ width: '16%' }} />
-            <col style={{ width: '22%' }} />
-            <col style={{ width: '18%' }} />
-            <col style={{ width: '14%' }} />
-          </colgroup>
-          <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+        <table className={MASH_TABLE}>
+          <thead>
             <tr>
-              <th className="px-3 py-2.5 text-right font-semibold border-b">رقم الدفعة</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b">الفئة</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b">الكمية / المتبقي</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b">ملاحظات</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b">التاريخ</th>
-              <th className="px-3 py-2.5 text-center font-semibold border-b">إجراءات</th>
+              <th className={`${MASH_TH_CENTER} col-code`}>رقم الدفعة</th>
+              <th className={`${MASH_TD} col-text`}>الفئة</th>
+              <th className={`${MASH_TH_CENTER} col-amount`}>الكمية / المتبقي</th>
+              <th className={`${MASH_TD} col-text`}>ملاحظات</th>
+              <th className={MASH_TH}>التاريخ</th>
+              <th className={MASH_TH_ACTIONS}>إجراءات</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
-              <tr>
-                <td colSpan={6} className="py-12 text-center text-muted-foreground">
-                  جارٍ التحميل…
-                </td>
+              <tr className={MASH_EMPTY_ROW}>
+                <td colSpan={6}>جارٍ التحميل…</td>
               </tr>
             )}
             {!isLoading && batches.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-12 text-center text-muted-foreground">
-                  لا توجد دفعات
-                </td>
+              <tr className={MASH_EMPTY_ROW}>
+                <td colSpan={6}>لا توجد دفعات</td>
               </tr>
             )}
             {paddingTop > 0 && (
@@ -266,30 +265,26 @@ export function BatchesTab() {
               if (!row) return null
               const summary = summaries[row.id]
               return (
-                <tr
-                  key={row.id}
-                  style={{ height: vItem.size }}
-                  className="hover:bg-mash-page border-b border-gray-100"
-                >
-                  <td className="px-3 py-2 font-medium tabular-nums text-right">
+                <tr key={row.id} style={{ height: vItem.size }}>
+                  <td className={`${MASH_TD_CODE} font-medium`}>
                     {row.batch_number?.trim() || '—'}
                   </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground truncate">
+                  <td className={`${MASH_TD} text-xs text-muted-foreground`}>
                     {summary?.product_names || '—'}
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-right">
+                  <td className={MASH_TD_AMOUNT}>
                     {summary
                       ? `${summary.total_qty.toLocaleString('ar-EG')} / ${summary.remaining_qty.toLocaleString('ar-EG')}`
                       : '—'}
                   </td>
                   <td
-                    className="px-3 py-2 text-xs text-muted-foreground truncate"
+                    className={`${MASH_TD} text-xs text-muted-foreground truncate`}
                     title={row.notes?.trim() || undefined}
                   >
                     {row.notes?.trim() || '—'}
                   </td>
-                  <td className="px-3 py-2 text-right whitespace-nowrap">{formatDate(row.received_at)}</td>
-                  <td className="px-3 py-2">
+                  <td className={`${MASH_TD} whitespace-nowrap`}>{formatDate(row.received_at)}</td>
+                  <td className={MASH_TD_ACTIONS}>
                     <div className="flex items-center justify-center gap-1">
                       <PermissionGuard permission="manage_card_inventory">
                         <Button
@@ -326,6 +321,7 @@ export function BatchesTab() {
           </tbody>
         </table>
       </div>
+      </DataPanel>
 
       <ReceiveBatchModal
         open={receiveOpen}

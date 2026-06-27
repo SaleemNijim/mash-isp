@@ -9,6 +9,8 @@ export interface DeleteTarget {
   name: string
   /** Optional description of downstream effects */
   consequences?: string
+  /** حذف نهائي — لا soft delete */
+  permanent?: boolean
 }
 
 interface DeleteConfirmState {

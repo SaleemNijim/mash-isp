@@ -120,13 +120,13 @@ function BankAccountsContent() {
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteVirtualData(
+  } = useInfiniteVirtualData<BankAccount>(
     'company_bank_accounts',
     ['bank_name', 'account_name', 'account_number'],
     debouncedSearch,
   )
 
-  const accounts = allItems as BankAccount[]
+  const accounts = allItems
 
   const accountIds = useMemo(() => accounts.map((a) => a.id), [accounts])
 
@@ -290,7 +290,7 @@ function BankAccountsContent() {
     <div dir="rtl" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">الحسابات البنكية</h1>
+          <h1 className="mash-page-title">الحسابات البنكية</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {accounts.length.toLocaleString('ar-EG')} حساب — إجمالي التحويلات البنكية:{' '}
             <strong>{formatMoney(overview?.bankInflowTotal ?? grandTotal)}</strong>
@@ -327,7 +327,7 @@ function BankAccountsContent() {
         <div className="grid gap-4 sm:grid-cols-3">
           <DataPanel className="p-4">
             <p className="text-sm text-muted-foreground">إجمالي النقدي</p>
-            <p className="text-2xl font-bold tabular-nums mt-1 text-emerald-700">
+            <p className="text-2xl font-bold tabular-nums mt-1 text-mash-success-text">
               {formatMoney(overview.cashTotal)}
             </p>
           </DataPanel>
@@ -349,7 +349,7 @@ function BankAccountsContent() {
       {showAddForm && (
         <form
           onSubmit={handleAdd}
-          className="border border-gray-200 rounded-lg bg-white p-4 space-y-3"
+          className="border border-border rounded-lg bg-card p-4 space-y-3"
         >
           <h2 className="font-semibold text-sm">إضافة حساب بنكي</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -422,29 +422,17 @@ function BankAccountsContent() {
 
       <div
         ref={containerRef}
-        className="overflow-auto border border-gray-200 rounded-lg bg-white max-h-[360px]"
+        className="mash-table-scroll border border-border rounded-lg bg-card max-h-[360px]"
       >
-        <table className="w-full text-sm border-collapse">
-          <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+        <table className="mash-data-table">
+          <thead>
             <tr>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                البنك
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                اسم الحساب
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                رقم الحساب
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                إجمالي المدفوعات
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                الرصيد المسجّل
-              </th>
-              <th className="px-3 py-2.5 text-center font-semibold text-gray-700 border-b w-28">
-                إجراءات
-              </th>
+              <th className="col-rtl">البنك</th>
+              <th className="col-rtl">اسم الحساب</th>
+              <th className="col-c col-mono">رقم الحساب</th>
+              <th className="col-c col-mono">إجمالي المدفوعات</th>
+              <th className="col-c col-mono">الرصيد المسجّل</th>
+              <th className="col-actions col-c">إجراءات</th>
             </tr>
           </thead>
           <tbody>
@@ -479,7 +467,7 @@ function BankAccountsContent() {
                 <tr
                   key={row.id}
                   style={{ height: vItem.size }}
-                  className={`hover:bg-mash-page border-b border-gray-100 cursor-pointer ${
+                  className={`hover:bg-mash-page border-b border-mash-row-border cursor-pointer ${
                     isSelected ? 'bg-primary/5 ring-1 ring-inset ring-primary/20' : ''
                   }`}
                   onClick={() =>

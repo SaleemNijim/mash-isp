@@ -223,7 +223,7 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
@@ -242,6 +242,19 @@ otp_expiry = 3600
 # pass = "env(SENDGRID_API_KEY)"
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
+
+# قوالب البريد — رمز OTP (6 أرقام) بدلاً من الرابط فقط
+[auth.email.template.confirmation]
+subject = "رمز تأكيد حساب MASH ISP"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "رمز إعادة تعيين كلمة المرور — MASH ISP"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.email_change]
+subject = "رمز تأكيد تغيير البريد — MASH ISP"
+content_path = "./supabase/templates/email_change.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]

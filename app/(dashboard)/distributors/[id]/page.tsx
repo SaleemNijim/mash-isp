@@ -2,11 +2,16 @@
 
 import { use, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, Plus, Wallet } from 'lucide-react'
+import { toast } from 'sonner'
+import { ArrowRight, Plus, Wallet, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { DataPanel } from '@/components/shared/DataPanel'
+import { PermissionGuard } from '@/components/permissions/PermissionGuard'
+import { RecordDeleteOptionsModal } from '@/components/shared/RecordDeleteOptionsModal'
+import { deleteRecordWithMode } from '@/lib/delete/record-delete'
 import { SellToDistributorModal } from '@/components/card-sales/SellToDistributorModal'
 import { SettleDistributorDebtModal } from '@/components/debts/SettleDistributorDebtModal'
 import { Button } from '@/components/ui/button'
@@ -53,16 +58,18 @@ export default function DistributorDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const router = useRouter()
   const supabase = createClient()
   const [saleOpen, setSaleOpen] = useState(false)
   const [settleOpen, setSettleOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const { data: distributor, refetch: refetchDist } = useQuery({
     queryKey: ['distributor', id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('distributors')
-        .select('id, name, phone, balance_due, notes')
+        .select('id, name, phone, address, balance_due, notes')
         .eq('id', id)
         .eq('is_deleted', false)
         .single()
@@ -122,7 +129,9 @@ export default function DistributorDetailPage({
 
       <PageHeader
         title={distributor.name}
-        description={distributor.phone ?? 'بدون هاتف'}
+        description={
+          [distributor.phone, distributor.address].filter(Boolean).join(' · ') || 'بدون تفاصيل اتصال'
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             {Number(distributor.balance_due) > 0 && (
@@ -135,6 +144,16 @@ export default function DistributorDetailPage({
               <Plus size={16} />
               بيع دفعة
             </Button>
+            <PermissionGuard permission="delete_records">
+              <Button
+                variant="outline"
+                className="gap-1.5 text-destructive hover:text-destructive"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 size={16} />
+                حذف الموزع
+              </Button>
+            </PermissionGuard>
           </div>
         }
       />
@@ -206,7 +225,7 @@ export default function DistributorDetailPage({
                   className="px-4 py-3 flex flex-wrap items-center justify-between gap-2"
                 >
                   <div>
-                    <p className="font-medium tabular-nums text-emerald-700">
+                    <p className="font-medium tabular-nums text-mash-success-text">
                       +{formatMoney(receipt.amount)}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -261,6 +280,25 @@ export default function DistributorDetailPage({
               }
             : null
         }
+      />
+
+      <RecordDeleteOptionsModal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={async (mode) => {
+          await deleteRecordWithMode({
+            table: 'distributors',
+            id,
+            mode,
+            supabase,
+          })
+          toast.success(mode === 'keep_data' ? 'تم إخفاء الموزع' : 'تم حذف الموزع نهائياً')
+          router.push('/distributors')
+        }}
+        recordName={distributor.name}
+        entityLabel="الموزع"
+        keepDataDescription="يُخفى الموزع من القائمة وسلة البيع، لكن سجل المبيعات والاستلام يبقى محفوظاً. لا يُسمح إذا كان عليه رصيد مستحق."
+        withDataDescription="يُحذف الموزع وجميع مبيعاته ودفعات الاستلام نهائياً — لا يمكن التراجع."
       />
     </div>
   )

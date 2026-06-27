@@ -31,10 +31,10 @@ function planFeatures(raw: unknown): string[] {
 function FeatureList({ features }: { features: string[] }) {
   if (!features.length) return null
   return (
-    <ul className="space-y-2 text-sm text-mash-text-secondary">
+    <ul className="space-y-2 text-sm text-[#4A6B60]">
       {features.map((f) => (
         <li key={f} className="flex items-center gap-2">
-          <CheckCircle2 size={15} className="text-primary-600 shrink-0" />
+          <CheckCircle2 size={15} className="shrink-0 text-[#0F6E56]" />
           <span>{f}</span>
         </li>
       ))}
@@ -45,13 +45,13 @@ function FeatureList({ features }: { features: string[] }) {
 function FreeTrialCard({ plan }: { plan: Plan }) {
   const features = planFeatures(plan.features)
   return (
-    <div className="relative rounded-xl border border-mash-border bg-mash-surface p-6 flex flex-col gap-5">
+    <div className="landing-card relative flex h-full flex-col gap-5 !p-6">
       <div>
-        <h3 className="text-[15px] font-medium text-mash-text">{plan.name}</h3>
+        <h3 className="text-base font-bold text-[#0D1F1A]">{plan.name}</h3>
         <div className="mt-3">
-          <span className="text-3xl font-medium text-mash-text">مجاناً</span>
+          <span className="text-3xl font-bold text-[#0D1F1A]">مجاناً</span>
         </div>
-        <p className="mt-1 text-sm text-mash-text-muted">
+        <p className="mt-1 text-sm text-[#4A6B60]">
           {plan.trial_days != null && <>لمدة {plan.trial_days} يوم — </>}
           لا بطاقة ائتمان
         </p>
@@ -59,7 +59,7 @@ function FreeTrialCard({ plan }: { plan: Plan }) {
 
       <FeatureList features={features} />
 
-      <Link href="/register" className="mt-auto mash-btn-secondary w-full text-center">
+      <Link href="/register" className="landing-btn-secondary mt-auto w-full text-center">
         ابدأ مجاناً
       </Link>
     </div>
@@ -75,23 +75,23 @@ function PlanCard({ plan }: { plan: Plan }) {
 
   return (
     <div
-      className={`relative rounded-xl p-6 flex flex-col gap-5 bg-mash-surface ${
+      className={`relative flex h-full flex-col gap-5 rounded-2xl bg-white p-6 ${
         isPro
-          ? 'border-2 border-primary-600'
-          : 'border border-mash-border'
+          ? 'border-2 border-[#0F6E56] shadow-[0_8px_40px_rgba(15,110,86,0.15)]'
+          : 'landing-card !p-6'
       }`}
     >
       {isPro && (
-        <div className="absolute -top-3 inset-x-0 flex justify-center">
-          <span className="bg-primary-50 text-primary-800 text-xs font-medium px-3 py-1 rounded-full">
+        <div className="absolute -top-3.5 inset-x-0 flex justify-center">
+          <span className="rounded-full bg-[#0F6E56] px-4 py-1 text-xs font-bold text-white">
             الأكثر شيوعاً
           </span>
         </div>
       )}
 
       <div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="text-[15px] font-medium text-mash-text">{plan.name}</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-base font-bold text-[#0D1F1A]">{plan.name}</h3>
           {hasDiscount && (
             <span className="mash-badge-success text-[11px]">
               وفِّر {plan.discount_percent}%
@@ -100,8 +100,8 @@ function PlanCard({ plan }: { plan: Plan }) {
         </div>
 
         <div className="mt-3 flex items-end gap-1">
-          <span className="text-3xl font-medium text-mash-text">${price}</span>
-          <span className="text-mash-text-muted text-sm mb-1">{'/' + period}</span>
+          <span className="text-3xl font-bold text-[#0D1F1A]">{price} ₪</span>
+          <span className="mb-1 text-sm text-[#4A6B60]">{'/' + period}</span>
         </div>
       </div>
 
@@ -109,7 +109,7 @@ function PlanCard({ plan }: { plan: Plan }) {
 
       <Link
         href="/register"
-        className={`mt-auto w-full text-center ${isPro ? 'mash-btn-primary' : 'mash-btn-secondary'}`}
+        className={`mt-auto w-full text-center ${isPro ? 'landing-btn-primary' : 'landing-btn-secondary'}`}
       >
         ابدأ مجاناً
       </Link>
@@ -128,7 +128,7 @@ export async function PricingCards() {
   if (!plans.length) return null
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4" dir="rtl">
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4" dir="rtl">
       {plans.map((plan) => {
         if (plan.is_coming_soon) {
           return (

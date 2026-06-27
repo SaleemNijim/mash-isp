@@ -41,13 +41,13 @@
   --color-primary-800: #085041;
   --color-primary-900: #04342C;
 
-  --color-mash-page: #FAFAF9;
+  --color-mash-page: #F8FFFE;
   --color-mash-surface: #FFFFFF;
-  --color-mash-border: #E5E3DA;
-  --color-mash-text: #2C2C2A;
-  --color-mash-text-secondary: #5F5E5A;
-  --color-mash-text-muted: #888780;
-  --color-mash-row-border: #F1EFE8;
+  --color-mash-border: #D1E8E2;
+  --color-mash-text: #0D1F1A;
+  --color-mash-text-secondary: #4A6B60;
+  --color-mash-text-muted: #6B8A7F;
+  --color-mash-row-border: #E8F5F1;
 
   --color-mash-success-bg: #EAF3DE;
   --color-mash-success-text: #27500A;
@@ -66,40 +66,40 @@
 
 /* MASH ISP — Design System v2.0 */
 :root {
-  --dashboard-bg: #FAFAF9;
+  --dashboard-bg: #F8FFFE;
 
-  --background: #FAFAF9;
-  --foreground: #2C2C2A;
+  --background: #F8FFFE;
+  --foreground: #0D1F1A;
   --card: #FFFFFF;
-  --card-foreground: #2C2C2A;
+  --card-foreground: #0D1F1A;
   --popover: #FFFFFF;
-  --popover-foreground: #2C2C2A;
+  --popover-foreground: #0D1F1A;
 
   --primary: #0F6E56;
   --primary-foreground: #FFFFFF;
 
-  --secondary: #FAFAF9;
-  --secondary-foreground: #2C2C2A;
-  --muted: #FAFAF9;
-  --muted-foreground: #888780;
-  --accent: #E1F5EE;
+  --secondary: #E8F5F1;
+  --secondary-foreground: #085041;
+  --muted: #F8FFFE;
+  --muted-foreground: #4A6B60;
+  --accent: #E8F5F1;
   --accent-foreground: #085041;
 
   --destructive: #A32D2D;
   --destructive-foreground: #FFFFFF;
 
-  --border: #E5E3DA;
-  --input: #E5E3DA;
+  --border: #D1E8E2;
+  --input: #D1E8E2;
   --ring: #0F6E56;
 
-  --radius: 0.5rem;
+  --radius: 0.75rem;
 
-  /* Sidebar — أبيض، Linear-style */
+  /* Sidebar */
   --sidebar: #FFFFFF;
-  --sidebar-foreground: #5F5E5A;
-  --sidebar-accent: #E1F5EE;
-  --sidebar-accent-foreground: #085041;
-  --sidebar-border: #E5E3DA;
+  --sidebar-foreground: #4A6B60;
+  --sidebar-accent: #E8F5F1;
+  --sidebar-accent-foreground: #0F6E56;
+  --sidebar-border: #D1E8E2;
   --sidebar-ring: #0F6E56;
 }
 
@@ -114,35 +114,36 @@
     @apply font-sans;
   }
   :focus-visible {
-    outline: 2px solid #0F6E56;
+    outline: 2px solid var(--primary, #0F6E56);
     outline-offset: 2px;
   }
 }
 
 @layer components {
   .mash-btn-primary {
-    @apply inline-flex items-center justify-center min-h-11 px-5 rounded-lg text-sm font-medium;
-    background-color: #0F6E56;
-    color: #fff;
-    transition: background-color 150ms ease, transform 100ms ease;
+    @apply inline-flex items-center justify-center min-h-11 px-5 rounded-xl text-sm font-bold;
+    background-color: var(--primary, #0F6E56);
+    color: var(--primary-foreground, #fff);
+    box-shadow: 0 4px 16px rgba(15, 110, 86, 0.25);
+    transition: background-color 150ms ease, transform 100ms ease, box-shadow 150ms ease;
   }
   .mash-btn-primary:hover {
-    background-color: #085041;
+    background-color: #1a9b77;
   }
   .mash-btn-primary:active {
     transform: scale(0.98);
   }
 
   .mash-btn-secondary {
-    @apply inline-flex items-center justify-center min-h-11 px-5 rounded-lg text-sm font-medium;
+    @apply inline-flex items-center justify-center min-h-11 px-5 rounded-xl text-sm font-bold;
     background-color: transparent;
-    color: #2C2C2A;
-    border: 1px solid #E5E3DA;
+    color: #0D1F1A;
+    border: 1px solid #D1E8E2;
     transition: border-color 150ms ease, background-color 150ms ease, transform 100ms ease;
   }
   .mash-btn-secondary:hover {
-    border-color: #9FE1CB;
-    background-color: #FAFAF9;
+    border-color: #0F6E56;
+    background-color: #E8F5F1;
   }
   .mash-btn-secondary:active {
     transform: scale(0.98);
@@ -169,18 +170,193 @@
     color: #0C447C;
   }
 
+  .mash-table-scroll {
+    @apply overflow-auto;
+  }
+
+  .mash-data-table {
+    @apply w-full border-collapse text-sm;
+  }
+
+  .mash-data-table thead {
+    @apply sticky top-0 z-10;
+    background: color-mix(in srgb, var(--muted) 80%, var(--card));
+    box-shadow: 0 1px 0 var(--border);
+  }
+
   .mash-data-table thead th {
-    @apply text-xs font-normal px-4 py-2.5 text-right;
-    color: #888780;
+    @apply px-3 py-2.5 text-xs font-semibold whitespace-nowrap align-middle;
+    color: var(--foreground);
   }
-  .mash-data-table tbody tr {
-    border-top: 0.5px solid #F1EFE8;
+
+  .mash-data-table th.col-rtl,
+  .mash-data-table td.col-rtl {
+    @apply text-right;
   }
-  .mash-data-table tbody tr:hover {
-    background-color: #FAFAF9;
-  }
+
   .mash-data-table tbody td {
-    @apply px-4 py-2.5 text-sm;
-    color: #2C2C2A;
+    @apply px-3 py-2 align-middle;
+    border-bottom: 1px solid #E8F5F1;
+    color: #0D1F1A;
+  }
+
+  .mash-data-table tbody tr {
+    @apply transition-colors;
+  }
+
+  .mash-data-table tbody tr:hover {
+    background-color: color-mix(in srgb, var(--muted) 40%, transparent);
+  }
+
+  .mash-data-table th.col-c,
+  .mash-data-table td.col-c {
+    text-align: center;
+  }
+
+  .mash-data-table th.col-mono,
+  .mash-data-table td.col-mono {
+    @apply font-mono text-xs tabular-nums;
+    letter-spacing: 0.025em;
+    direction: ltr;
+    text-align: center;
+  }
+
+  .mash-data-table .col-index {
+    @apply w-11 min-w-11 max-w-11;
+  }
+
+  .mash-data-table .col-ip {
+    width: 9.75rem;
+    min-width: 9.75rem;
+    max-width: 9.75rem;
+  }
+
+  .mash-data-table .col-mac {
+    width: 8.75rem;
+    min-width: 8.75rem;
+    max-width: 8.75rem;
+  }
+
+  .mash-data-table .col-code {
+    width: 5.5rem;
+    min-width: 5.5rem;
+  }
+
+  .mash-data-table .col-phone {
+    width: 6.5rem;
+    min-width: 6.5rem;
+  }
+
+  .mash-data-table .col-actions {
+    @apply min-w-32;
+  }
+
+  .mash-data-table .col-actions-wide {
+    min-width: 18rem;
+  }
+
+  .mash-data-table .col-text {
+    min-width: 6rem;
+    max-width: 14rem;
+  }
+
+  .mash-data-table .mash-empty-row td {
+    @apply py-14 text-center text-muted-foreground;
+  }
+
+  .mash-data-table .col-amount {
+    width: 6rem;
+    min-width: 6rem;
+  }
+
+  .mash-data-table td.col-index {
+    @apply text-muted-foreground tabular-nums;
+  }
+
+  .mash-section {
+    @apply rounded-2xl border border-[#D1E8E2] bg-card p-5 shadow-[0_2px_12px_rgba(15,110,86,0.06)];
+  }
+
+  .mash-page-title {
+    @apply text-2xl font-bold text-[#0D1F1A] tracking-tight;
+  }
+
+  .mash-kpi-card {
+    @apply rounded-2xl border border-[#D1E8E2] bg-white p-4 shadow-[0_2px_12px_rgba(15,110,86,0.06)] transition-all duration-200;
+  }
+
+  .mash-kpi-card:hover {
+    @apply shadow-[0_4px_20px_rgba(15,110,86,0.1)] -translate-y-0.5;
+  }
+
+  .mash-page-description {
+    @apply mt-1 text-sm text-[#4A6B60];
+  }
+
+  /* Landing page */
+  .landing-container {
+    @apply mx-auto w-full max-w-[1200px] px-6 sm:px-8;
+  }
+
+  .landing-section {
+    @apply py-20 lg:py-[100px];
+  }
+
+  .landing-card {
+    @apply rounded-2xl border border-[#D1E8E2] bg-white p-8 shadow-[0_2px_12px_rgba(15,110,86,0.06)] transition-all duration-300;
+  }
+
+  .landing-card:hover {
+    @apply -translate-y-1 shadow-[0_8px_32px_rgba(15,110,86,0.12)];
+  }
+
+  .landing-btn-primary {
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-bold text-white transition-all duration-200;
+    background-color: #0f6e56;
+    box-shadow: 0 4px 16px rgba(15, 110, 86, 0.3);
+  }
+
+  .landing-btn-primary:hover {
+    background-color: #1a9b77;
+  }
+
+  .landing-btn-secondary {
+    @apply inline-flex items-center justify-center rounded-xl border border-[#D1E8E2] bg-white px-6 py-3 text-sm font-bold text-[#0D1F1A] transition-all duration-200;
+  }
+
+  .landing-btn-secondary:hover {
+    @apply border-[#0F6E56] bg-[#E8F5F1];
+  }
+
+  .landing-dot-grid {
+    background-image: radial-gradient(circle, rgba(15, 110, 86, 0.12) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  @keyframes landing-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+
+  .landing-float {
+    animation: landing-float 6s ease-in-out infinite;
+  }
+
+  @keyframes landing-marquee {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
+  .landing-marquee-track {
+    animation: landing-marquee 30s linear infinite;
   }
 }

@@ -27,6 +27,10 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
 import { AlertsPanel, type DashboardAlert } from '@/components/dashboard/AlertsPanel'
+import { countPendingInbox } from '@/lib/pending-tasks/inbox'
+import { fetchSalesInRange, summarizeSales, type SaleRow } from '@/lib/sales/fetch-sales'
+import { dayEndISO, monthStartISO, todayDateStr, todayStartISO } from '@/lib/sales/date-range'
+import { formatAmount } from '@/lib/format-money'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,8 +41,16 @@ interface KpiData {
   activeDebts: number
   pendingTasks: number
   bbAvailable: number
+  pppPlansUnderMin: number
   cardsUnderLimit: number
   bankTotal: number
+}
+
+interface PppPlanLowRow {
+  id: string
+  name: string
+  min_available_usernames: number
+  available: number
 }
 
 interface RevenuePoint {
@@ -61,7 +73,7 @@ interface DashboardData {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10)
+  return todayDateStr()
 }
 
 function addDaysISO(days: number): string {
@@ -71,81 +83,80 @@ function addDaysISO(days: number): string {
 }
 
 function startOfTodayISO(): string {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d.toISOString()
+  return todayStartISO()
 }
 
-function sixMonthsAgoISO(): string {
-  const d = new Date()
-  d.setMonth(d.getMonth() - 5)
-  d.setDate(1)
-  d.setHours(0, 0, 0, 0)
-  return d.toISOString()
+function monthBucketKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}`
 }
 
-function formatMoney(n: number): string {
-  return `${n.toLocaleString('ar-EG')} ج.م`
-}
-
-const AR_MONTHS = [
-  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
-  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
-]
-
-function monthLabel(iso: string): string {
-  const d = new Date(iso)
-  return `${AR_MONTHS[d.getMonth()]} ${d.getFullYear()}`
-}
-
-function buildRevenueSeries(
-  payments: { paid_at: string | null; amount: number; method: string }[],
+function buildRevenueSeriesFromSales(
+  sales: SaleRow[],
+  tenantCreatedAt: string,
 ): RevenuePoint[] {
-  const start = new Date(sixMonthsAgoISO())
+  const start = new Date(tenantCreatedAt)
+  const now = new Date()
   const buckets: RevenuePoint[] = []
+  const keyToBucket = new Map<string, RevenuePoint>()
 
-  for (let i = 0; i < 6; i++) {
-    const d = new Date(start)
-    d.setMonth(start.getMonth() + i)
-    buckets.push({
-      month: monthLabel(d.toISOString()),
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1)
+  const end = new Date(now.getFullYear(), now.getMonth(), 1)
+
+  while (cursor <= end) {
+    const point: RevenuePoint = {
+      month: cursor.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' }),
       revenue: 0,
-    })
+    }
+    buckets.push(point)
+    keyToBucket.set(monthBucketKey(cursor), point)
+    cursor.setMonth(cursor.getMonth() + 1)
   }
 
-  payments.forEach((p) => {
-    if (!p.paid_at || p.method === 'debt') return
-    const paid = new Date(p.paid_at)
-    const key = `${AR_MONTHS[paid.getMonth()]} ${paid.getFullYear()}`
-    const bucket = buckets.find((b) => b.month === key)
-    if (bucket) bucket.revenue += Number(p.amount)
-  })
+  for (const sale of sales) {
+    const paid = new Date(sale.created_at)
+    const bucket = keyToBucket.get(monthBucketKey(paid))
+    if (bucket) bucket.revenue += sale.amount
+  }
 
   return buckets
 }
 
 function buildTopCardsSeries(
-  items: { quantity: number; product_id: string }[],
-  products: { id: string; name: string }[],
+  items: {
+    quantity: number
+    product_id: string
+    card_products: { name?: string } | { name?: string }[] | null
+  }[],
 ): TopCardPoint[] {
-  const totals = new Map<string, number>()
-  items.forEach((item) => {
-    totals.set(item.product_id, (totals.get(item.product_id) ?? 0) + item.quantity)
-  })
+  const totals = new Map<string, { name: string; sold: number }>()
 
-  const nameMap = new Map(products.map((p) => [p.id, p.name]))
+  for (const item of items) {
+    const productRaw = item.card_products
+    const product = Array.isArray(productRaw) ? productRaw[0] : productRaw
+    const name = product?.name?.trim() || 'منتج محذوف'
+    const prev = totals.get(item.product_id)
+    totals.set(item.product_id, {
+      name,
+      sold: (prev?.sold ?? 0) + (Number(item.quantity) || 0),
+    })
+  }
 
-  return [...totals.entries()]
-    .map(([id, sold]) => ({ name: nameMap.get(id) ?? 'غير معروف', sold }))
+  return [...totals.values()]
+    .filter((p) => p.sold > 0)
     .sort((a, b) => b.sold - a.sold)
     .slice(0, 8)
+}
+
+function formatMoney(n: number): string {
+  return formatAmount(n)
 }
 
 function buildAlerts(
   expiringToday: number,
   overdueTasks: number,
-  bbAvailable: number,
+  pppLowPlans: PppPlanLowRow[],
   cardsUnderLimit: number,
+  pendingFollowup: number,
 ): DashboardAlert[] {
   const alerts: DashboardAlert[] = []
 
@@ -169,12 +180,22 @@ function buildAlerts(
     })
   }
 
-  if (bbAvailable < 20) {
+  if (pendingFollowup > 0) {
     alerts.push({
-      id: 'bb-low',
+      id: 'pending-followup',
       severity: 'warning',
-      title: 'يوزرات BB متاحة أقل من 20',
-      description: `متبقٍ ${bbAvailable} يوزر فقط — أضف كريدنشالز`,
+      title: 'عناصر بانتظار المتابعة',
+      description: `${pendingFollowup} عنصر${pendingFollowup === 1 ? '' : 'اً'} (مهام/ديون/تحويلات) بانتظار المتابعة`,
+      href: '/pending-tasks',
+    })
+  }
+
+  for (const plan of pppLowPlans) {
+    alerts.push({
+      id: `ppp-low-${plan.id}`,
+      severity: 'warning',
+      title: `PPP: ${plan.name} تحت الحد الأدنى`,
+      description: `متبقٍ ${plan.available} username متاح (الحد ${plan.min_available_usernames})`,
       href: '/credentials',
     })
   }
@@ -192,12 +213,17 @@ function buildAlerts(
   return alerts
 }
 
-async function fetchDashboardData(tenantId: string): Promise<DashboardData> {
+async function fetchDashboardData(
+  tenantId: string,
+  tenantCreatedAt: string,
+): Promise<DashboardData> {
   const supabase = createClient()
   const today = todayISO()
   const in7 = addDaysISO(7)
   const todayStart = startOfTodayISO()
-  const sixMonthsAgo = sixMonthsAgoISO()
+  const todayEnd = dayEndISO(today)
+  const subscriptionRangeStart = monthStartISO(new Date(tenantCreatedAt))
+  const subscriptionRangeEnd = dayEndISO(today)
   const overdueCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   const [
@@ -206,14 +232,13 @@ async function fetchDashboardData(tenantId: string): Promise<DashboardData> {
     expiringTodayRes,
     todayPaymentsRes,
     activeDebtsRes,
-    pendingTasksRes,
     overdueTasksRes,
     bbAvailableRes,
+    pppPlansRes,
+    pppAvailableRowsRes,
     cardsLowRes,
     bankAccountsRes,
-    revenuePaymentsRes,
     saleItemsRes,
-    productsRes,
   ] = await Promise.all([
     supabase
       .from('subscriptions')
@@ -257,13 +282,6 @@ async function fetchDashboardData(tenantId: string): Promise<DashboardData> {
       .select('*', { count: 'exact', head: true })
       .eq('tenant_id', tenantId)
       .eq('is_deleted', false)
-      .in('status', ['pending', 'reminded']),
-
-    supabase
-      .from('pending_tasks')
-      .select('*', { count: 'exact', head: true })
-      .eq('tenant_id', tenantId)
-      .eq('is_deleted', false)
       .in('status', ['pending', 'reminded'])
       .lt('created_at', overdueCutoff),
 
@@ -274,6 +292,21 @@ async function fetchDashboardData(tenantId: string): Promise<DashboardData> {
       .eq('is_deleted', false)
       .eq('type', 'bb')
       .eq('is_used', false),
+
+    supabase
+      .from('ppp_plans')
+      .select('id, name, min_available_usernames')
+      .eq('tenant_id', tenantId)
+      .eq('is_deleted', false),
+
+    supabase
+      .from('internet_credentials')
+      .select('plan_id')
+      .eq('tenant_id', tenantId)
+      .eq('is_deleted', false)
+      .eq('type', 'bb')
+      .eq('is_used', false)
+      .not('plan_id', 'is', null),
 
     supabase
       .from('card_products')
@@ -288,40 +321,61 @@ async function fetchDashboardData(tenantId: string): Promise<DashboardData> {
       .eq('is_deleted', false),
 
     supabase
-      .from('payments')
-      .select('paid_at, amount, method')
-      .eq('tenant_id', tenantId)
-      .eq('is_deleted', false)
-      .gte('paid_at', sixMonthsAgo),
-
-    supabase
       .from('card_sale_items')
-      .select('quantity, product_id')
-      .eq('tenant_id', tenantId)
-      .eq('is_deleted', false),
-
-    supabase
-      .from('card_products')
-      .select('id, name')
+      .select('quantity, product_id, card_products(name)')
       .eq('tenant_id', tenantId)
       .eq('is_deleted', false),
   ])
 
-  const todayRevenue = (todayPaymentsRes.data ?? [])
-    .filter((p) => p.method !== 'debt')
-    .reduce((sum, p) => sum + Number(p.amount), 0)
+  const [pendingInboxCount, subscriptionSalesRows] = await Promise.all([
+    countPendingInbox(supabase, tenantId),
+    fetchSalesInRange(supabase, tenantId, subscriptionRangeStart, subscriptionRangeEnd),
+  ])
+
+  const todaySalesRows = subscriptionSalesRows.filter(
+    (row) => row.created_at >= todayStart && row.created_at <= todayEnd,
+  )
+
+  const todaySalesTotal = summarizeSales(todaySalesRows).total
+
+  const todayRevenue = todaySalesTotal > 0
+    ? todaySalesTotal
+    : (todayPaymentsRes.data ?? [])
+        .filter((p) => p.method !== 'debt')
+        .reduce((sum, p) => sum + Number(p.amount), 0)
 
   const cardsUnderLimit = (cardsLowRes.data ?? []).filter(
     (p) => p.quantity_in_stock < p.min_quantity,
   ).length
 
   const bankTotal = (bankAccountsRes.data ?? []).reduce(
-    (sum, a) => sum + Number(a.current_total),
+    (sum, a) => sum + (Number(a.current_total) || 0),
     0,
   )
 
   const bbAvailable = bbAvailableRes.count ?? 0
-  const pendingTasks = pendingTasksRes.count ?? 0
+  const pendingTasks = pendingInboxCount
+
+  const availableByPlan: Record<string, number> = {}
+  for (const row of pppAvailableRowsRes.data ?? []) {
+    const pid = row.plan_id as string
+    availableByPlan[pid] = (availableByPlan[pid] ?? 0) + 1
+  }
+
+  const pppLowPlans: PppPlanLowRow[] = (pppPlansRes.data ?? [])
+    .filter(
+      (p) =>
+        p.min_available_usernames > 0 &&
+        (availableByPlan[p.id] ?? 0) < p.min_available_usernames,
+    )
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      min_available_usernames: p.min_available_usernames,
+      available: availableByPlan[p.id] ?? 0,
+    }))
+
+  const pppPlansUnderMin = pppLowPlans.length
 
   const kpis: KpiData = {
     activeSubscriptions: activeSubsRes.count ?? 0,
@@ -330,6 +384,7 @@ async function fetchDashboardData(tenantId: string): Promise<DashboardData> {
     activeDebts: activeDebtsRes.count ?? 0,
     pendingTasks,
     bbAvailable,
+    pppPlansUnderMin,
     cardsUnderLimit,
     bankTotal,
   }
@@ -339,11 +394,12 @@ async function fetchDashboardData(tenantId: string): Promise<DashboardData> {
     alerts: buildAlerts(
       expiringTodayRes.count ?? 0,
       overdueTasksRes.count ?? 0,
-      bbAvailable,
+      pppLowPlans,
       cardsUnderLimit,
+      pendingInboxCount,
     ),
-    revenueChart: buildRevenueSeries(revenuePaymentsRes.data ?? []),
-    topCardsChart: buildTopCardsSeries(saleItemsRes.data ?? [], productsRes.data ?? []),
+    revenueChart: buildRevenueSeriesFromSales(subscriptionSalesRows, tenantCreatedAt),
+    topCardsChart: buildTopCardsSeries(saleItemsRes.data ?? []),
   }
 }
 
@@ -364,18 +420,20 @@ function KpiCard({
 }) {
   const border =
     highlight === 'danger'
-      ? 'border-red-200'
+      ? 'border-[#FCEBEB] bg-[#FFFBFB]'
       : highlight === 'warning'
-        ? 'border-amber-200'
-        : 'border-gray-200'
+        ? 'border-[#FAEEDA] bg-[#FFFDF8]'
+        : 'border-[#D1E8E2]'
 
   const inner = (
-    <div className={`rounded-xl border bg-white p-4 shadow-sm ${border}`}>
+    <div className={`mash-kpi-card ${border}`}>
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-gray-500">{label}</p>
-        <Icon size={16} className="text-blue-600 shrink-0" />
+        <p className="text-xs font-medium text-[#4A6B60]">{label}</p>
+        <span className="flex size-8 items-center justify-center rounded-xl bg-[#E8F5F1]">
+          <Icon size={15} className="text-[#0F6E56] shrink-0" />
+        </span>
       </div>
-      <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
+      <p className="mt-3 text-2xl font-bold text-[#0D1F1A]">{value}</p>
     </div>
   )
 
@@ -401,12 +459,12 @@ export default function DashboardPage() {
   const [pendingTasks, setPendingTasks] = useState<number | null>(null)
 
   const reload = useCallback(async () => {
-    if (!tenant?.id) return
+    if (!tenant?.id || !tenant.created_at) return
     setLoading(true)
     setLoadError(null)
     const t0 = performance.now()
     try {
-      const result = await fetchDashboardData(tenant.id)
+      const result = await fetchDashboardData(tenant.id, tenant.created_at)
       const elapsed = Math.round(performance.now() - t0)
       setData(result)
       setPendingTasks(result.kpis.pendingTasks)
@@ -418,39 +476,39 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [tenant?.id])
+  }, [tenant?.id, tenant?.created_at])
 
   useEffect(() => {
-    if (!tenant?.id) return
+    if (!tenant?.id || !tenant.created_at) return
     void reload()
-  }, [tenant?.id, reload])
+  }, [tenant?.id, tenant?.created_at, reload])
 
-  // Realtime — تحديث عداد المهام المعلقة فوراً
+  // Realtime — تحديث عداد صندوق المهام المعلقة (مهام + ديون + تحويلات)
   useEffect(() => {
     if (!tenant?.id) return
     const supabase = createClient()
 
-    const channel = supabase
-      .channel(`dashboard-pending-tasks-${tenant.id}`)
-      .on(
+    const refreshPendingCount = () => {
+      void countPendingInbox(supabase, tenant.id).then(setPendingTasks)
+    }
+
+    const tables = ['pending_tasks', 'debts', 'payments', 'payment_proofs'] as const
+    const channel = supabase.channel(`dashboard-pending-inbox-${tenant.id}`)
+
+    for (const table of tables) {
+      channel.on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'pending_tasks',
+          table,
           filter: `tenant_id=eq.${tenant.id}`,
         },
-        async () => {
-          const { count } = await supabase
-            .from('pending_tasks')
-            .select('*', { count: 'exact', head: true })
-            .eq('tenant_id', tenant.id)
-            .eq('is_deleted', false)
-            .in('status', ['pending', 'reminded'])
-          setPendingTasks(count ?? 0)
-        },
+        refreshPendingCount,
       )
-      .subscribe()
+    }
+
+    channel.subscribe()
 
     return () => {
       supabase.removeChannel(channel)
@@ -460,7 +518,7 @@ export default function DashboardPage() {
   if (loadError) {
     return (
       <div dir="rtl" className="flex flex-col items-center justify-center gap-3 py-24 text-center">
-        <p className="text-sm text-red-600">تعذّر تحميل لوحة القيادة: {loadError}</p>
+        <p className="text-sm text-destructive">تعذّر تحميل لوحة القيادة: {loadError}</p>
         <button
           onClick={() => void reload()}
           className="rounded-md border border-mash-border px-4 py-2 text-sm text-mash-text hover:bg-mash-page"
@@ -473,7 +531,7 @@ export default function DashboardPage() {
 
   if (loading || !data) {
     return (
-      <div dir="rtl" className="flex items-center justify-center py-24 text-gray-500">
+      <div dir="rtl" className="flex items-center justify-center py-24 text-muted-foreground">
         <Loader2 size={24} className="ml-2 animate-spin" />
         جارٍ تحميل لوحة القيادة...
       </div>
@@ -489,13 +547,13 @@ export default function DashboardPage() {
     <div dir="rtl" className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">لوحة القيادة</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="mash-page-title">لوحة القيادة</h1>
+          <p className="mash-page-description">
             نظرة شاملة على أداء {tenant?.name ?? 'شركتك'}
           </p>
         </div>
         {loadMs !== null && (
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-muted-foreground">
             KPIs: {loadMs}ms (Promise.all)
           </span>
         )}
@@ -517,10 +575,10 @@ export default function DashboardPage() {
           highlight={kpis.expiringIn7Days > 0 ? 'warning' : undefined}
         />
         <KpiCard
-          label="إيرادات اليوم"
+          label="مبيعات اليوم"
           value={formatMoney(kpis.todayRevenue)}
           icon={DollarSign}
-          href="/bank-accounts"
+          href="/reports"
         />
         <KpiCard
           label="ديون نشطة"
@@ -529,18 +587,18 @@ export default function DashboardPage() {
           highlight={kpis.activeDebts > 0 ? 'danger' : undefined}
         />
         <KpiCard
-          label="مهام معلقة"
+          label="بانتظار المتابعة"
           value={kpis.pendingTasks}
           icon={ClipboardList}
           href="/pending-tasks"
           highlight={kpis.pendingTasks > 0 ? 'warning' : undefined}
         />
         <KpiCard
-          label="يوزرات BB متاحة"
-          value={kpis.bbAvailable}
+          label="باقات PPP تحت الحد"
+          value={kpis.pppPlansUnderMin}
           icon={Users}
           href="/credentials"
-          highlight={kpis.bbAvailable < 20 ? 'warning' : undefined}
+          highlight={kpis.pppPlansUnderMin > 0 ? 'warning' : undefined}
         />
         <KpiCard
           label="بطاقات تحت الحد"
@@ -561,13 +619,18 @@ export default function DashboardPage() {
 
       {/* Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-base font-semibold text-gray-900">
-            إيرادات آخر 6 أشهر
+        <section className="mash-section">
+          <h2 className="mb-4 text-base font-bold text-[#0D1F1A]">
+            إيرادات شهرية منذ الاشتراك
           </h2>
+          {data.revenueChart.length === 0 ? (
+            <p className="py-16 text-center text-sm text-muted-foreground">
+              لا توجد إيرادات مسجّلة بعد
+            </p>
+          ) : (
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={data.revenueChart}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis
                 dataKey="month"
                 tick={{ fontSize: 11 }}
@@ -578,33 +641,34 @@ export default function DashboardPage() {
               />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip
-                formatter={(value) => [formatMoney(Number(value)), 'الإيرادات']}
+                formatter={(value) => [formatMoney(Number(value) || 0), 'الإيرادات']}
                 labelStyle={{ direction: 'rtl' }}
               />
               <Line
                 type="monotone"
                 dataKey="revenue"
-                stroke="#2563eb"
+                stroke="#0F6E56"
                 strokeWidth={2}
                 dot={{ r: 4 }}
                 activeDot={{ r: 6 }}
               />
             </LineChart>
           </ResponsiveContainer>
+          )}
         </section>
 
-        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-base font-semibold text-gray-900">
+        <section className="mash-section">
+          <h2 className="mb-4 text-base font-bold text-[#0D1F1A]">
             أكثر البطاقات مبيعاً
           </h2>
           {data.topCardsChart.length === 0 ? (
-            <p className="py-16 text-center text-sm text-gray-500">
+            <p className="py-16 text-center text-sm text-muted-foreground">
               لا توجد مبيعات بطاقات بعد
             </p>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={data.topCardsChart} layout="vertical" margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis type="number" tick={{ fontSize: 11 }} />
                 <YAxis
                   type="category"
@@ -613,10 +677,10 @@ export default function DashboardPage() {
                   width={90}
                 />
                 <Tooltip
-                  formatter={(value) => [Number(value), 'مباع']}
+                  formatter={(value) => [Number(value) || 0, 'مباع']}
                   labelStyle={{ direction: 'rtl' }}
                 />
-                <Bar dataKey="sold" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="sold" fill="#0F6E56" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

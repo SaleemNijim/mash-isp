@@ -9,8 +9,10 @@ import {
   LayoutDashboard, Users, Wifi, CreditCard, Package,
   Network, DollarSign, FileText, FileSpreadsheet, Settings, Menu, X, ClipboardList,
   ShoppingCart, KeyRound, Landmark, LogOut, Truck, PanelLeftClose, PanelLeft, Mail,
+  SlidersHorizontal, Trash2, ScrollText,
   type LucideIcon,
 } from 'lucide-react'
+import { TenantBrand } from '@/components/shared/TenantBrand'
 import {
   getNavForRole,
   isDashboardNavActive,
@@ -47,6 +49,9 @@ const NAV_ICONS: Record<DashboardNavIcon, LucideIcon> = {
   Landmark,
   Truck,
   Mail,
+  SlidersHorizontal,
+  Trash2,
+  ScrollText,
 }
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -123,24 +128,27 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
       <aside
         className={`
-          fixed top-0 right-0 z-30 h-full bg-mash-surface text-mash-text-secondary
-          border-l border-mash-border flex flex-col
+          fixed top-0 right-0 z-30 h-full bg-white text-mash-text-secondary
+          border-l border-[#D1E8E2] flex flex-col shadow-[2px_0_20px_rgba(15,110,86,0.04)]
           transition-[width,transform] duration-200 ease-out
           ${sidebarWidth}
           lg:translate-x-0
           ${mobileOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
         `}
       >
-        <div className={`flex items-center h-14 px-3 border-b border-mash-border shrink-0 ${collapsed ? 'justify-center' : 'justify-between'}`}>
-          {!collapsed && (
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="h-7 w-7 rounded-md bg-primary-600 flex items-center justify-center shrink-0">
-                <span className="text-white text-xs font-medium">M</span>
-              </div>
-              <span className="text-sm font-medium text-mash-text truncate">
-                {isCashier ? 'MASH — كاشير' : 'MASH ISP'}
-              </span>
-            </div>
+        <div className={`flex items-center h-14 px-3 border-b border-[#D1E8E2] shrink-0 ${collapsed ? 'justify-center' : 'justify-between'}`}>
+          {collapsed ? (
+            <TenantBrand
+              name={tenant?.name ?? 'MASH'}
+              logoUrl={tenant?.logo_url}
+              collapsed
+            />
+          ) : (
+            <TenantBrand
+              name={tenant?.name ?? 'MASH ISP'}
+              logoUrl={tenant?.logo_url}
+              subtitle={isCashier ? 'كاشير' : undefined}
+            />
           )}
           <button
             onClick={() => setMobileOpen(false)}
@@ -165,11 +173,11 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             const Icon = NAV_ICONS[icon]
             const active = isDashboardNavActive(pathname, href)
             const itemClass = `
-              flex items-center gap-2.5 px-3 min-h-9 rounded-md text-[13px] font-medium transition-colors mb-0.5
+              flex items-center gap-2.5 px-3 min-h-9 rounded-xl text-[13px] font-medium transition-colors mb-0.5
               ${active
-                ? 'bg-primary-50 text-primary-800'
+                ? 'bg-[#E8F5F1] text-[#0F6E56] font-bold shadow-sm'
                 : available
-                  ? 'text-mash-text-secondary hover:bg-mash-page'
+                  ? 'text-mash-text-secondary hover:bg-[#F8FFFE] hover:text-[#0D1F1A]'
                   : 'text-mash-text-muted/50 cursor-not-allowed'
               }
               ${collapsed ? 'justify-center px-2' : ''}
@@ -209,8 +217,8 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="shrink-0 border-t border-mash-border p-2 space-y-1">
-          {!collapsed && tenant && (
+        <div className="shrink-0 border-t border-[#D1E8E2] p-2 space-y-1">
+          {!collapsed && tenant && !tenant.logo_url && (
             <p className="text-xs text-mash-text-muted truncate px-2 py-1">{tenant.name}</p>
           )}
           <Button
@@ -227,7 +235,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className={`${mainMargin} flex flex-col min-h-screen transition-[margin] duration-200 ease-out`}>
-        <header className="sticky top-0 z-10 bg-mash-surface/95 border-b border-mash-border h-12 flex items-center gap-3 px-4">
+        <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-[#D1E8E2] bg-white/90 px-4 backdrop-blur-xl">
           <button
             onClick={() => setMobileOpen(true)}
             className="lg:hidden text-mash-text-muted hover:text-mash-text min-h-11 min-w-11 inline-flex items-center justify-center"

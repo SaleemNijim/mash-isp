@@ -12,6 +12,7 @@ import {
   Check,
   type LucideIcon,
 } from 'lucide-react'
+import { PublicPageHero } from '@/components/shared/PublicPageHero'
 
 export const metadata: Metadata = {
   title: 'المميزات',
@@ -124,57 +125,55 @@ const FEATURE_DETAILS: {
 
 export default function FeaturesPage() {
   return (
-    <div className="bg-mash-page">
-      <section className="bg-mash-page py-16 lg:py-24 border-b border-mash-border">
-        <div className="max-w-6xl mx-auto px-8 text-center">
-          <h1 className="text-3xl sm:text-4xl font-medium text-mash-text mb-4">
-            مميزات MASH ISP بالتفصيل
-          </h1>
-          <p className="text-base text-mash-text-secondary max-w-2xl mx-auto leading-relaxed">
-            كل وظيفة مصممة لحل مشكلة حقيقية يواجهها مشغلو شبكات الإنترنت يومياً.
-          </p>
-          <div className="mt-8">
-            <Link href="/register" className="mash-btn-primary">
-              ابدأ مجاناً
-            </Link>
-          </div>
+    <div className="bg-white">
+      <PublicPageHero
+        eyebrow="المميزات"
+        title="مميزات MASH ISP بالتفصيل"
+        description="كل وظيفة مصممة لحل مشكلة حقيقية يواجهها مشغّلو شبكات الإنترنت يومياً."
+      />
+
+      <section className="landing-container pb-8 pt-4">
+        <div className="text-center">
+          <Link href="/register" className="landing-btn-primary">
+            ابدأ مجاناً
+          </Link>
         </div>
       </section>
 
-      <section className="max-w-6xl mx-auto px-8 py-16 lg:py-20">
+      <section className="landing-container pb-20">
         <div className="space-y-12">
           {FEATURE_DETAILS.map((feature, idx) => {
             const Icon = feature.icon
             return (
               <div
                 key={feature.title}
-                className={`flex flex-col lg:flex-row items-start gap-8 ${
+                className={`flex flex-col items-start gap-8 lg:flex-row ${
                   idx % 2 === 1 ? 'lg:flex-row-reverse' : ''
                 }`}
               >
                 <div className="lg:w-1/3 shrink-0">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="w-12 h-12 rounded-lg bg-primary-50 flex items-center justify-center shrink-0">
-                      <Icon className="w-6 h-6 text-primary-600" strokeWidth={1.5} />
+                  <div className="mb-4 flex items-center gap-4">
+                    <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[#E8F5F1]">
+                      <Icon className="size-6 text-[#0F6E56]" strokeWidth={1.5} />
                     </div>
-                    <h2 className="text-xl font-medium text-mash-text">{feature.title}</h2>
+                    <h2 className="text-xl font-bold text-[#0D1F1A]">{feature.title}</h2>
                   </div>
                   <Link
                     href="/register"
-                    className="inline-flex items-center text-sm font-medium text-primary-600 hover:underline underline-offset-2 min-h-11"
+                    className="inline-flex min-h-11 items-center text-sm font-bold text-[#0F6E56] hover:underline underline-offset-2"
                   >
                     ابدأ مجاناً ←
                   </Link>
                 </div>
 
-                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
                   {feature.benefits.map((b) => (
                     <div
                       key={b}
-                      className="flex items-start gap-3 bg-mash-surface rounded-xl px-4 py-3 border border-mash-border"
+                      className="landing-card !p-4 flex items-start gap-3 !shadow-none hover:!shadow-[0_4px_20px_rgba(15,110,86,0.08)]"
                     >
-                      <Check className="w-4 h-4 text-primary-600 mt-0.5 shrink-0" strokeWidth={2} />
-                      <span className="text-sm text-mash-text-secondary leading-relaxed">{b}</span>
+                      <Check className="mt-0.5 size-4 shrink-0 text-[#0F6E56]" strokeWidth={2} />
+                      <span className="text-sm leading-relaxed text-[#4A6B60]">{b}</span>
                     </div>
                   ))}
                 </div>
@@ -184,15 +183,15 @@ export default function FeaturesPage() {
         </div>
       </section>
 
-      <section className="bg-mash-surface py-16 border-t border-mash-border">
-        <div className="max-w-3xl mx-auto px-8 text-center">
-          <h2 className="text-2xl sm:text-3xl font-medium text-mash-text mb-4">
+      <section className="border-t border-[#D1E8E2] bg-[#F8FFFE] py-16">
+        <div className="landing-container max-w-3xl text-center">
+          <h2 className="mb-4 text-2xl font-bold text-[#0D1F1A] sm:text-3xl">
             مقتنع؟ ابدأ تجربتك المجانية الآن
           </h2>
-          <p className="text-mash-text-secondary mb-8">
+          <p className="mb-8 text-[#4A6B60]">
             وصول كامل لجميع المميزات خلال فترة التجربة. لا بطاقة ائتمان مطلوبة.
           </p>
-          <Link href="/register" className="mash-btn-primary text-base px-10">
+          <Link href="/register" className="landing-btn-primary px-10 text-base">
             ابدأ مجاناً
           </Link>
         </div>

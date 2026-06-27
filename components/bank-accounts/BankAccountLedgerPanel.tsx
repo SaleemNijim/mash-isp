@@ -89,7 +89,7 @@ export function BankAccountLedgerPanel({
         </p>
       ) : (
         <div className="overflow-x-auto max-h-56 overflow-y-auto">
-          <table className="w-full text-sm">
+          <table className="mash-data-table">
             <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur border-b border-border">
               <tr>
                 <th className="px-3 py-2 text-right font-semibold text-xs">التاريخ</th>

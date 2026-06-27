@@ -79,7 +79,7 @@ function PlanCard({ plan }: { plan: Plan }) {
           )}
         </div>
         <div className="mt-3 flex items-end gap-1">
-          <span className="text-3xl font-medium text-mash-text">${price}</span>
+          <span className="text-3xl font-medium text-mash-text">{price} ₪</span>
           <span className="text-mash-text-muted text-sm mb-1">{'/' + period}</span>
         </div>
       </div>

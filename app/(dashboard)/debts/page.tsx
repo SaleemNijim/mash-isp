@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatMoney } from '@/lib/format-money'
+import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import {
   SettleCustomerDebtModal,
   type CustomerDebtTarget,
@@ -187,47 +188,50 @@ export default function DebtsPage() {
               <p className="py-10 text-center text-sm text-muted-foreground">لا توجد ديون نشطة</p>
             )}
             {customerDebts.length > 0 && (
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 border-b border-border">
+              <div className="mash-table-scroll">
+              <table className="mash-data-table">
+                <thead>
                   <tr>
-                    <th className="px-4 py-2.5 text-right font-semibold">المشترك</th>
-                    <th className="px-4 py-2.5 text-right font-semibold">المبلغ</th>
-                    <th className="px-4 py-2.5 text-right font-semibold">الحالة</th>
-                    <th className="px-4 py-2.5 text-right font-semibold">السبب</th>
-                    <th className="px-4 py-2.5 text-right font-semibold w-44">إجراءات</th>
+                    <th className="col-rtl">المشترك</th>
+                    <th className="col-c col-mono col-amount">المبلغ</th>
+                    <th className="col-rtl">الحالة</th>
+                    <th className="col-rtl col-text">السبب</th>
+                    <th className="col-actions col-c">إجراءات</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody>
                   {customerDebts.map((d) => {
                     const remaining = Number(d.remaining_amount ?? d.original_amount)
                     return (
-                      <tr key={d.id} className="hover:bg-muted/20">
-                        <td className="px-4 py-2.5">
+                      <tr key={d.id}>
+                        <td className="col-rtl">
                           <p className="font-medium">{d.customers?.name ?? '—'}</p>
                           {d.customers?.phone && (
                             <p className="text-xs text-muted-foreground">{d.customers.phone}</p>
                           )}
                         </td>
-                        <td className="px-4 py-2.5 tabular-nums font-medium">
+                        <td className="col-c col-mono col-amount font-semibold">
                           {formatMoney(remaining)}
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td className="col-rtl">
                           <Badge variant="secondary">{STATUS_LABELS[d.status] ?? d.status}</Badge>
                         </td>
-                        <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                        <td className="col-rtl text-muted-foreground text-xs">
                           {d.reason ?? '—'}
                         </td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-7 gap-1 text-xs"
-                              onClick={() => openCustomerSettle(d)}
-                            >
-                              <Wallet size={12} />
-                              تسديد
-                            </Button>
+                        <td className="col-actions col-c">
+                          <div className="flex flex-wrap items-center justify-center gap-1.5">
+                            <PermissionGuard permission="manage_debts">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => openCustomerSettle(d)}
+                              >
+                                <Wallet size={12} />
+                                تسديد
+                              </Button>
+                            </PermissionGuard>
                             <Button
                               type="button"
                               variant="outline"
@@ -247,6 +251,7 @@ export default function DebtsPage() {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </DataPanel>
         </TabsContent>
@@ -258,37 +263,40 @@ export default function DebtsPage() {
                 لا مستحقات على الموزعين
               </p>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 border-b border-border">
+              <div className="mash-table-scroll">
+              <table className="mash-data-table">
+                <thead>
                   <tr>
-                    <th className="px-4 py-2.5 text-right font-semibold">الموزع</th>
-                    <th className="px-4 py-2.5 text-right font-semibold">المستحق</th>
-                    <th className="px-4 py-2.5 text-right font-semibold w-44">إجراءات</th>
+                    <th className="col-rtl">الموزع</th>
+                    <th className="col-c col-mono col-amount">المستحق</th>
+                    <th className="col-actions col-c">إجراءات</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody>
                   {distributorDebts.map((d) => (
-                    <tr key={d.id} className="hover:bg-muted/20">
-                      <td className="px-4 py-2.5">
+                    <tr key={d.id}>
+                      <td className="col-rtl">
                         <p className="font-medium">{d.name}</p>
                         {d.phone && (
                           <p className="text-xs text-muted-foreground">{d.phone}</p>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 tabular-nums font-semibold text-amber-700">
+                      <td className="col-c col-mono col-amount font-semibold text-amber-700">
                         {formatMoney(d.balance_due)}
                       </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-7 gap-1 text-xs"
-                            onClick={() => openDistributorSettle(d)}
-                          >
-                            <Wallet size={12} />
-                            تسديد
-                          </Button>
+                      <td className="col-actions col-c">
+                        <div className="flex flex-wrap items-center justify-center gap-1.5">
+                          <PermissionGuard permission="manage_debts">
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 gap-1 text-xs"
+                              onClick={() => openDistributorSettle(d)}
+                            >
+                              <Wallet size={12} />
+                              تسديد
+                            </Button>
+                          </PermissionGuard>
                           <Button
                             type="button"
                             variant="outline"
@@ -307,6 +315,7 @@ export default function DebtsPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </DataPanel>
         </TabsContent>

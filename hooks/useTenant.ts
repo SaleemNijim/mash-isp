@@ -7,12 +7,15 @@ import { throwIfSupabaseError } from '@/lib/supabase/errors'
 export interface Tenant {
   id: string
   name: string
+  logo_url: string | null
+  phone: string | null
   is_active: boolean
   is_trial: boolean
   trial_ends_at: string | null
   subscription_end: string | null
   plan_id: string | null
   billing_cycle: string | null
+  created_at: string
 }
 
 export function useTenant() {
@@ -39,7 +42,7 @@ export function useTenant() {
 
       const { data: tenant, error: tenantError } = await supabase
         .from('tenants')
-        .select('id,name,is_active,is_trial,trial_ends_at,subscription_end,plan_id,billing_cycle')
+        .select('id,name,logo_url,phone,is_active,is_trial,trial_ends_at,subscription_end,plan_id,billing_cycle,created_at')
         .eq('id', profile.tenant_id)
         .single()
 

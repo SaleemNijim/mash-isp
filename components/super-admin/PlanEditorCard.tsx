@@ -60,7 +60,7 @@ function planFeatures(raw: unknown): string[] {
 function FeatureList({ features }: { features: string[] }) {
   if (!features.length) return null
   return (
-    <ul className="space-y-2 text-sm text-gray-600">
+    <ul className="space-y-2 text-sm text-muted-foreground">
       {features.map((f) => (
         <li key={f} className="flex items-center gap-2">
           <CheckCircle2 size={15} className="text-green-500 shrink-0" />
@@ -85,14 +85,14 @@ function PlanCardPreview({ plan }: { plan: Plan }) {
     <div
       className={`relative rounded-2xl p-8 flex flex-col gap-5 shadow-sm ${
         isHighlighted
-          ? 'border-2 border-blue-600 bg-blue-50'
-          : 'border border-gray-200 bg-white'
+          ? 'border-2 border-primary bg-primary-50'
+          : 'border border-border bg-card'
       }`}
       dir="rtl"
     >
       {isHighlighted && (
         <div className="absolute -top-4 inset-x-0 flex justify-center">
-          <span className="bg-blue-600 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm">
+          <span className="bg-primary text-primary-foreground text-xs font-bold px-4 py-1.5 rounded-full shadow-sm">
             الأفضل قيمة
           </span>
         </div>
@@ -100,9 +100,9 @@ function PlanCardPreview({ plan }: { plan: Plan }) {
 
       <div>
         <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
+          <h3 className="text-lg font-bold text-foreground">{plan.name}</h3>
           {hasDiscount && (
-            <span className="bg-green-100 text-green-700 text-xs font-bold px-2.5 py-0.5 rounded-full">
+            <span className="bg-mash-success-bg text-mash-success-text text-xs font-bold px-2.5 py-0.5 rounded-full">
               وفِّر {plan.discount_percent}%
             </span>
           )}
@@ -111,12 +111,12 @@ function PlanCardPreview({ plan }: { plan: Plan }) {
         <div className="mt-3 flex items-end gap-1">
           <span
             className={`text-4xl font-extrabold ${
-              isHighlighted ? 'text-blue-700' : 'text-gray-900'
+              isHighlighted ? 'text-primary-600' : 'text-foreground'
             }`}
           >
-            ${price}
+            {price} ₪
           </span>
-          <span className="text-gray-500 text-sm mb-1.5">/{period}</span>
+          <span className="text-muted-foreground text-sm mb-1.5">/{period}</span>
         </div>
       </div>
 
@@ -272,6 +272,15 @@ export function PlanEditorCard({ plan, onUpdated }: PlanEditorCardProps) {
           .update({ price_monthly: value })
           .eq('slug', 'pro_monthly')
         if (error) throw error
+
+        // مزامنة price_monthly في صف pro_annual حتى تُحسب نسبة التوفير
+        // (Generated Column) بناءً على السعر الشهري الفعلي لا قيمة قديمة.
+        const { error: syncError } = await supabase
+          .from('subscription_plans')
+          .update({ price_monthly: value })
+          .eq('slug', 'pro_annual')
+        if (syncError) throw syncError
+
         toast.success('تم تحديث السعر الشهري')
       } else if (priceConfirm.kind === 'price_annual') {
         const value = parseFloat(priceConfirm.value)
@@ -279,9 +288,23 @@ export function PlanEditorCard({ plan, onUpdated }: PlanEditorCardProps) {
           toast.error('أدخل سعراً صالحاً')
           return
         }
+
+        // اقرأ السعر الشهري الحالي من صف pro_monthly واكتبه في صف pro_annual
+        // ليكون أساس حساب نسبة التوفير صحيحاً في قاعدة البيانات.
+        const { data: monthlyRow } = await supabase
+          .from('subscription_plans')
+          .select('price_monthly')
+          .eq('slug', 'pro_monthly')
+          .single()
+
+        const updatePayload: Record<string, unknown> = { price_annual: value }
+        if (monthlyRow?.price_monthly != null) {
+          updatePayload.price_monthly = monthlyRow.price_monthly
+        }
+
         const { data, error } = await supabase
           .from('subscription_plans')
-          .update({ price_annual: value })
+          .update(updatePayload)
           .eq('slug', 'pro_annual')
           .select('*')
           .single()
@@ -506,7 +529,7 @@ export function PlanEditorCard({ plan, onUpdated }: PlanEditorCardProps) {
         {/* ① price_monthly — pro_monthly */}
         {plan.slug === 'pro_monthly' && (
           <div className="space-y-2">
-            <Label htmlFor={`monthly-${plan.id}`}>السعر الشهري ($)</Label>
+            <Label htmlFor={`monthly-${plan.id}`}>السعر الشهري (₪)</Label>
             <div className="flex gap-2">
               <Input
                 id={`monthly-${plan.id}`}
@@ -528,7 +551,7 @@ export function PlanEditorCard({ plan, onUpdated }: PlanEditorCardProps) {
         {plan.slug === 'pro_annual' && (
           <div className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor={`annual-${plan.id}`}>السعر السنوي ($)</Label>
+              <Label htmlFor={`annual-${plan.id}`}>السعر السنوي (₪)</Label>
               <div className="flex gap-2">
                 <Input
                   id={`annual-${plan.id}`}
@@ -544,10 +567,18 @@ export function PlanEditorCard({ plan, onUpdated }: PlanEditorCardProps) {
                 </Button>
               </div>
             </div>
-            {discountPercent != null && (
-              <p className="text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2">
+            {discountPercent != null && discountPercent > 0 && (
+              <p className="text-sm text-mash-success-text bg-mash-success-bg rounded-lg px-3 py-2">
                 نسبة التوفير من قاعدة البيانات:{' '}
                 <span className="font-bold">وفِّر {discountPercent}%</span>
+              </p>
+            )}
+            {discountPercent != null && discountPercent <= 0 && (
+              <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 dark:border-amber-900/40 dark:bg-amber-950/30">
+                لا يوجد توفير — السعر السنوي ({priceAnnual || '—'} ₪) أعلى من أو يساوي
+                السعر الشهري × 12. اجعل السعر السنوي أقل من{' '}
+                {priceMonthly ? (Number(priceMonthly) * 12).toFixed(0) : '—'} ₪ لإظهار
+                نسبة توفير.
               </p>
             )}
           </div>
@@ -575,15 +606,15 @@ export function PlanEditorCard({ plan, onUpdated }: PlanEditorCardProps) {
 
         {/* ⑦ تفعيل Enterprise */}
         {plan.slug === 'enterprise' && plan.is_coming_soon && (
-          <div className="rounded-lg border border-dashed border-blue-300 bg-blue-50/50 p-4 space-y-3">
-            <h3 className="font-semibold text-blue-900">تفعيل Enterprise</h3>
+          <div className="rounded-lg border border-dashed border-primary-400 bg-primary-50 p-4 space-y-3">
+            <h3 className="font-semibold text-primary-800">تفعيل Enterprise</h3>
             <p className="text-xs text-muted-foreground">
               إدخال السعر ودورة الفوترة ثم تفعيل الخطة بنقرة واحدة — بدون
               تعديل كود.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor={`ent-price-${plan.id}`}>السعر ($)</Label>
+                <Label htmlFor={`ent-price-${plan.id}`}>السعر (₪)</Label>
                 <Input
                   id={`ent-price-${plan.id}`}
                   type="number"

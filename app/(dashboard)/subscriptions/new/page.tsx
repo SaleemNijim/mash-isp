@@ -3,6 +3,7 @@
 import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { SubscriptionPeriodForm } from '@/components/subscriptions/SubscriptionPeriodForm'
+import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 
 function NewSubscriptionContent() {
   const searchParams = useSearchParams()
@@ -25,7 +26,16 @@ export default function NewSubscriptionPage() {
         </div>
       }
     >
-      <NewSubscriptionContent />
+      <PermissionGuard
+        permission="create_subscriptions"
+        fallback={
+          <div dir="rtl" className="py-16 text-center text-muted-foreground">
+            ليس لديك صلاحية إنشاء اشتراك جديد.
+          </div>
+        }
+      >
+        <NewSubscriptionContent />
+      </PermissionGuard>
     </Suspense>
   )
 }

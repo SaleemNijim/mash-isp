@@ -2,10 +2,19 @@
 
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, RefreshCw, ShoppingCart } from 'lucide-react'
+import { CalendarDays, Plus, RefreshCw, ShoppingCart } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
 import { usePermissions } from '@/hooks/usePermissions'
+import { fetchSalesInRange, type SaleRow } from '@/lib/sales/fetch-sales'
+import {
+  dayEndISO,
+  dayStartISO,
+  formatDateLabel,
+  todayDateStr,
+  todayStartISO,
+} from '@/lib/sales/date-range'
+import { formatAmount } from '@/lib/format-money'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { DataPanel } from '@/components/shared/DataPanel'
 import { NewSaleModal, type SaleSelection } from '@/components/sales/NewSaleModal'
@@ -14,20 +23,16 @@ import { SellToDistributorModal } from '@/components/card-sales/SellToDistributo
 import { SubscriptionPickModal } from '@/components/sales/SubscriptionPickModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
-interface TodaySaleRow {
-  id: string
-  kind: 'retail' | 'distributor' | 'renewal'
-  label: string
-  amount: number
-  discountPercent?: number | null
-  created_at: string
-}
-
-function todayStartISO(): string {
+function yesterdayDateStr(): string {
   const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d.toISOString()
+  d.setDate(d.getDate() - 1)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 function formatTime(iso: string): string {
@@ -35,6 +40,56 @@ function formatTime(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function kindBadge(kind: SaleRow['kind']) {
+  if (kind === 'retail') return <Badge variant="secondary">بطاقات</Badge>
+  if (kind === 'distributor') return <Badge variant="outline">موزع</Badge>
+  if (kind === 'new') return <Badge variant="default">اشتراك جديد</Badge>
+  return <Badge>تجديد</Badge>
+}
+
+function SalesLogList({
+  sales,
+  isLoading,
+  emptyMessage,
+}: {
+  sales: SaleRow[]
+  isLoading: boolean
+  emptyMessage: string
+}) {
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground text-center py-10">جارٍ التحميل...</p>
+  }
+  if (sales.length === 0) {
+    return <p className="text-sm text-muted-foreground text-center py-10">{emptyMessage}</p>
+  }
+  return (
+    <ul className="divide-y divide-border">
+      {sales.map((sale) => (
+        <li
+          key={`${sale.kind}-${sale.id}`}
+          className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/20"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {kindBadge(sale.kind)}
+            <span className="text-sm truncate">{sale.label}</span>
+          </div>
+          <div className="text-left shrink-0">
+            <p className="text-sm font-medium tabular-nums">
+              {formatAmount(sale.amount)}
+            </p>
+            {sale.discountPercent != null && sale.discountPercent > 0 && (
+              <p className="text-xs text-mash-success-text tabular-nums">
+                خصم {sale.discountPercent.toLocaleString('ar-EG')}%
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">{formatTime(sale.created_at)}</p>
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 export default function SalesPage() {
@@ -50,88 +105,47 @@ export default function SalesPage() {
   )
   const [distributorOpen, setDistributorOpen] = useState(false)
   const [renewalOpen, setRenewalOpen] = useState(false)
+  const [historyDate, setHistoryDate] = useState(yesterdayDateStr)
 
   const todayStart = todayStartISO()
+  const todayEnd = dayEndISO(todayDateStr())
 
-  const { data: todaySales = [], refetch, isLoading } = useQuery<TodaySaleRow[]>({
+  const { data: todaySales = [], refetch, isLoading } = useQuery<SaleRow[]>({
     queryKey: ['sales-today', tenant?.id, todayStart],
     queryFn: async () => {
       if (!tenant?.id) return []
-
-      const [retailRes, distRes, payRes] = await Promise.all([
-        supabase
-          .from('card_retail_sales')
-          .select('id, total_amount, sale_type, discount_percent, created_at, card_products(name)')
-          .eq('tenant_id', tenant.id)
-          .eq('is_deleted', false)
-          .gte('created_at', todayStart)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('card_distributor_sales')
-          .select('id, total_amount, distributor_name, created_at')
-          .eq('tenant_id', tenant.id)
-          .eq('is_deleted', false)
-          .gte('created_at', todayStart)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('payments')
-          .select('id, amount, created_at, customers(name)')
-          .eq('tenant_id', tenant.id)
-          .eq('is_deleted', false)
-          .gte('created_at', todayStart)
-          .order('created_at', { ascending: false }),
-      ])
-
-      const rows: TodaySaleRow[] = []
-
-      for (const r of retailRes.data ?? []) {
-        const productRaw = r.card_products as { name?: string } | { name?: string }[] | null
-        const product = Array.isArray(productRaw) ? productRaw[0] : productRaw
-        rows.push({
-          id: r.id,
-          kind: 'retail',
-          label: product?.name ? `بطاقة — ${product.name}` : 'بيع بطاقة',
-          amount: Number(r.total_amount),
-          discountPercent: r.discount_percent != null ? Number(r.discount_percent) : null,
-          created_at: r.created_at,
-        })
-      }
-
-      for (const d of distRes.data ?? []) {
-        rows.push({
-          id: d.id,
-          kind: 'distributor',
-          label: `موزع: ${d.distributor_name}`,
-          amount: Number(d.total_amount ?? 0),
-          created_at: d.created_at,
-        })
-      }
-
-      for (const p of payRes.data ?? []) {
-        const customerRaw = p.customers as { name?: string } | { name?: string }[] | null
-        const customer = Array.isArray(customerRaw) ? customerRaw[0] : customerRaw
-        rows.push({
-          id: p.id,
-          kind: 'renewal',
-          label: `تجديد PPP — ${customer?.name ?? ''}`,
-          amount: Number(p.amount),
-          created_at: p.created_at,
-        })
-      }
-
-      rows.sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-      )
-
-      return rows
+      return fetchSalesInRange(supabase, tenant.id, todayStart, todayEnd)
     },
     enabled: !!tenant?.id,
     refetchInterval: 30_000,
   })
 
+  const {
+    data: historySales = [],
+    isLoading: historyLoading,
+    refetch: refetchHistory,
+  } = useQuery<SaleRow[]>({
+    queryKey: ['sales-history', tenant?.id, historyDate],
+    queryFn: async () => {
+      if (!tenant?.id) return []
+      return fetchSalesInRange(
+        supabase,
+        tenant.id,
+        dayStartISO(historyDate),
+        dayEndISO(historyDate),
+      )
+    },
+    enabled: !!tenant?.id && !!historyDate,
+  })
+
   const todayTotal = useMemo(
     () => todaySales.reduce((sum, s) => sum + s.amount, 0),
     [todaySales],
+  )
+
+  const historyTotal = useMemo(
+    () => historySales.reduce((sum, s) => sum + s.amount, 0),
+    [historySales],
   )
 
   function handleSaleSelect(selection: SaleSelection) {
@@ -142,14 +156,14 @@ export default function SalesPage() {
 
   function handleSuccess() {
     void refetch()
+    void refetchHistory()
     void queryClient.invalidateQueries({ queryKey: ['card-products-for-sale'] })
     void queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
   }
 
-  const kindBadge = (kind: TodaySaleRow['kind']) => {
-    if (kind === 'retail') return <Badge variant="secondary">بطاقات</Badge>
-    if (kind === 'distributor') return <Badge variant="outline">موزع</Badge>
-    return <Badge>PPP</Badge>
+  function handleRefresh() {
+    void refetch()
+    void refetchHistory()
   }
 
   return (
@@ -158,7 +172,7 @@ export default function SalesPage() {
         title="المبيعات"
         description={`واجهة ${userName} — تسجيل عمليات البيع اليومية`}
         actions={
-          <Button variant="outline" size="sm" onClick={() => void refetch()} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-1.5">
             <RefreshCw size={14} />
             تحديث
           </Button>
@@ -170,7 +184,7 @@ export default function SalesPage() {
           <div>
             <p className="text-sm text-muted-foreground">إجمالي مبيعات اليوم</p>
             <p className="text-3xl font-bold tabular-nums text-primary mt-1">
-              {todayTotal.toLocaleString('ar-EG')} ج.م
+              {formatAmount(todayTotal)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               {todaySales.length} عملية
@@ -193,40 +207,49 @@ export default function SalesPage() {
           سجل اليوم
         </h2>
         <DataPanel>
-          {isLoading && (
-            <p className="text-sm text-muted-foreground text-center py-10">جارٍ التحميل...</p>
-          )}
-          {!isLoading && todaySales.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-10">
-              لا توجد عمليات اليوم — اضغط «إضافة عملية بيع»
+          <SalesLogList
+            sales={todaySales}
+            isLoading={isLoading}
+            emptyMessage="لا توجد عمليات اليوم — اضغط «إضافة عملية بيع»"
+          />
+        </DataPanel>
+      </div>
+
+      <div>
+        <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
+          <h2 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <CalendarDays size={16} />
+            سجل المبيعات
+          </h2>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="sales-history-date" className="text-sm text-muted-foreground shrink-0">
+              فلترة باليوم
+            </Label>
+            <Input
+              id="sales-history-date"
+              type="date"
+              value={historyDate}
+              max={todayDateStr()}
+              onChange={(e) => setHistoryDate(e.target.value)}
+              className="w-auto"
+              dir="ltr"
+            />
+          </div>
+        </div>
+        <DataPanel>
+          <div className="px-4 py-3 border-b border-border bg-muted/20">
+            <p className="text-sm font-medium">{formatDateLabel(historyDate)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {historyLoading
+                ? 'جارٍ الحساب...'
+                : `${formatAmount(historyTotal)} — ${historySales.length} عملية`}
             </p>
-          )}
-          {todaySales.length > 0 && (
-            <ul className="divide-y divide-border">
-              {todaySales.map((sale) => (
-                <li
-                  key={`${sale.kind}-${sale.id}`}
-                  className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/20"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    {kindBadge(sale.kind)}
-                    <span className="text-sm truncate">{sale.label}</span>
-                  </div>
-                  <div className="text-left shrink-0">
-                    <p className="text-sm font-medium tabular-nums">
-                      {sale.amount.toLocaleString('ar-EG')} ج.م
-                    </p>
-                    {sale.discountPercent != null && sale.discountPercent > 0 && (
-                      <p className="text-xs text-emerald-700 tabular-nums">
-                        خصم {sale.discountPercent.toLocaleString('ar-EG')}%
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground">{formatTime(sale.created_at)}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          </div>
+          <SalesLogList
+            sales={historySales}
+            isLoading={historyLoading}
+            emptyMessage="لا توجد عمليات بيع في هذا اليوم"
+          />
         </DataPanel>
       </div>
 

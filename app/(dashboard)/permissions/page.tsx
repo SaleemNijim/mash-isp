@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { UserPlus, UserX, RefreshCw } from 'lucide-react'
+import { UserPlus, UserX, RefreshCw, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
 import { useCurrentUserId } from '@/hooks/useMessages'
@@ -16,10 +16,13 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import { PermissionMatrix } from '@/components/permissions/PermissionMatrix'
 import { SuspendUserConfirmModal } from '@/components/permissions/SuspendUserConfirmModal'
+import { EditEmployeeModal } from '@/components/permissions/EditEmployeeModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { DataPanel } from '@/components/shared/DataPanel'
 
 function invalidateTenantUserQueries(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: TENANT_USERS_QUERY_KEY })
@@ -44,6 +47,7 @@ function PermissionsContent() {
   const [suspendTarget, setSuspendTarget] = useState<{ id: string; name: string } | null>(
     null,
   )
+  const [editTarget, setEditTarget] = useState<{ id: string; name: string } | null>(null)
   const [suspending, setSuspending] = useState(false)
 
   const [empName, setEmpName] = useState('')
@@ -94,7 +98,7 @@ function PermissionsContent() {
       return
     }
 
-    toast.success('تم إنشاء حساب الكاشير — صلاحيات: مبيعات + تجديد + شبكة (قراءة)')
+    toast.success('تم إنشاء حساب الكاشير — صلاحيات: مبيعات + تجديد')
     setEmpName('')
     setEmpEmail('')
     setEmpPassword('')
@@ -130,24 +134,22 @@ function PermissionsContent() {
 
   return (
     <div dir="rtl" className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">الصلاحيات والمستخدمون</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          إدارة موظفي الشركة ومصفوفة الصلاحيات
+      <PageHeader
+        title="الصلاحيات والمستخدمون"
+        description="إدارة موظفي الشركة ومصفوفة الصلاحيات"
+      />
+      {currentAdmin && (
+        <p className="-mt-4 text-xs text-muted-foreground">
+          مسجّل الدخول:{' '}
+          <span className="font-medium text-foreground">{currentAdmin.name}</span>
+          <span className="text-muted-foreground/60"> · </span>
+          {ROLE_LABELS[currentAdmin.role] ?? currentAdmin.role}
         </p>
-        {currentAdmin && (
-          <p className="mt-2 text-xs text-gray-500">
-            مسجّل الدخول:{' '}
-            <span className="font-medium text-gray-800">{currentAdmin.name}</span>
-            <span className="text-gray-400"> · </span>
-            {ROLE_LABELS[currentAdmin.role] ?? currentAdmin.role}
-          </p>
-        )}
-      </div>
+      )}
 
       {isAdmin && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-900">
+        <section className="mash-section">
+          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-foreground">
             <UserPlus size={18} />
             إضافة موظف (كاشير)
           </h2>
@@ -189,12 +191,12 @@ function PermissionsContent() {
                 className="text-right"
                 aria-describedby="empPassword-hint"
               />
-              <p id="empPassword-hint" className="text-xs text-gray-500">
+              <p id="empPassword-hint" className="text-xs text-muted-foreground">
                 8 أحرف على الأقل
               </p>
             </div>
             <div className="flex items-end">
-              <Button type="submit" disabled={adding} className="w-full">
+              <Button type="submit" disabled={adding} className="w-full min-h-11">
                 {adding ? 'جارٍ الإنشاء...' : 'إنشاء حساب'}
               </Button>
             </div>
@@ -202,9 +204,9 @@ function PermissionsContent() {
         </section>
       )}
 
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <DataPanel className="p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">المستخدمون النشطون</h2>
+          <h2 className="text-base font-semibold text-foreground">المستخدمون النشطون</h2>
           <Button variant="outline" size="sm" onClick={() => void refetch()}>
             <RefreshCw size={14} className="ml-1" />
             تحديث
@@ -212,48 +214,60 @@ function PermissionsContent() {
         </div>
 
         {loadingUsers ? (
-          <p className="text-sm text-gray-500">جارٍ التحميل...</p>
+          <p className="text-sm text-muted-foreground">جارٍ التحميل...</p>
         ) : usersError ? (
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-destructive">
             تعذّر تحميل المستخدمين:{' '}
             {usersLoadError instanceof Error ? usersLoadError.message : 'خطأ غير معروف'}
           </p>
         ) : users.length === 0 ? (
-          <p className="text-sm text-gray-500">لا يوجد مستخدمون نشطون.</p>
+          <p className="text-sm text-muted-foreground">لا يوجد مستخدمون نشطون.</p>
         ) : (
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-border">
             {users.map((user) => (
               <div
                 key={user.id}
                 className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
               >
-                <div className="flex items-center gap-3">
-                  <span className="font-medium text-gray-900">{user.name}</span>
-                  <Badge variant="secondary">
-                    {ROLE_LABELS[user.role] ?? user.role}
-                  </Badge>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-foreground">{user.name}</span>
+                    <Badge variant="secondary">
+                      {ROLE_LABELS[user.role] ?? user.role}
+                    </Badge>
+                  </div>
                 </div>
                 {user.role === 'employee' && isAdmin && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={suspending && suspendTarget?.id === user.id}
-                    onClick={() => setSuspendTarget({ id: user.id, name: user.name })}
-                  >
-                    <UserX size={14} className="ml-1" />
-                    {suspending && suspendTarget?.id === user.id
-                      ? 'جارٍ التعليق...'
-                      : 'تعليق مستخدم'}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditTarget({ id: user.id, name: user.name })}
+                    >
+                      <Pencil size={14} className="ml-1" />
+                      تعديل الحساب
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={suspending && suspendTarget?.id === user.id}
+                      onClick={() => setSuspendTarget({ id: user.id, name: user.name })}
+                    >
+                      <UserX size={14} className="ml-1" />
+                      {suspending && suspendTarget?.id === user.id
+                        ? 'جارٍ التعليق...'
+                        : 'تعليق مستخدم'}
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}
           </div>
         )}
-      </section>
+      </DataPanel>
 
       <section>
-        <h2 className="mb-4 text-base font-semibold text-gray-900">مصفوفة الصلاحيات</h2>
+        <h2 className="mb-4 text-base font-semibold text-foreground">مصفوفة الصلاحيات</h2>
         <PermissionMatrix />
       </section>
 
@@ -264,6 +278,13 @@ function PermissionsContent() {
           if (!suspending) setSuspendTarget(null)
         }}
         onConfirm={confirmSuspend}
+      />
+
+      <EditEmployeeModal
+        open={editTarget !== null}
+        employee={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSaved={() => invalidateTenantUserQueries(queryClient)}
       />
     </div>
   )

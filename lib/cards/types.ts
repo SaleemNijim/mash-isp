@@ -5,6 +5,7 @@ export interface CardProductRow {
   denomination: number | null
   cost_price: number | null
   sale_price: number | null
+  distributor_price: number | null
   quantity_in_stock: number
   min_quantity: number
   card_type?: string | null
@@ -27,6 +28,7 @@ export interface CardBatchRow {
 export interface CategoryFormState {
   name: string
   sale_price: string
+  distributor_price: string
   min_quantity: string
   attributeRows: { key: string; value: string }[]
 }
@@ -35,6 +37,7 @@ export function emptyCategoryForm(): CategoryFormState {
   return {
     name: '',
     sale_price: '',
+    distributor_price: '',
     min_quantity: '0',
     attributeRows: [],
   }
@@ -66,6 +69,9 @@ export function parseCategoryForm(form: CategoryFormState) {
   return {
     name: form.name.trim(),
     sale_price: form.sale_price.trim() ? Number(form.sale_price) : null,
+    distributor_price: form.distributor_price.trim()
+      ? Number(form.distributor_price)
+      : null,
     min_quantity: form.min_quantity.trim() ? Number(form.min_quantity) : 0,
     attributes: attributesFromRows(form.attributeRows),
   }
@@ -75,7 +81,19 @@ export function categoryFormFromProduct(p: CardProductRow): CategoryFormState {
   return {
     name: p.name,
     sale_price: p.sale_price != null ? String(p.sale_price) : '',
+    distributor_price:
+      p.distributor_price != null ? String(p.distributor_price) : '',
     min_quantity: String(p.min_quantity ?? 0),
     attributeRows: rowsFromAttributes(p.attributes),
   }
+}
+
+/** سعر البطاقة للموزع — يُ fallback إلى سعر التجزئة إن لم يُحدَّد */
+export function distributorUnitPrice(product: {
+  distributor_price?: number | null
+  sale_price?: number | null
+}): number | null {
+  if (product.distributor_price != null) return product.distributor_price
+  if (product.sale_price != null) return product.sale_price
+  return null
 }

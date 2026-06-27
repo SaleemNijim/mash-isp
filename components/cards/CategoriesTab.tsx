@@ -15,9 +15,21 @@ import { useInfiniteVirtualData } from '@/hooks/useInfiniteVirtualData'
 import { useDeleteConfirm } from '@/hooks/useDeleteConfirm'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import { DeleteConfirmModal } from '@/components/shared/DeleteConfirmModal'
+import { DataPanel } from '@/components/shared/DataPanel'
 import { CategoryFormModal } from '@/components/cards/CategoryFormModal'
 import { type CardProductRow } from '@/lib/cards/types'
 import { formatMoney } from '@/lib/format-money'
+import {
+  MASH_TABLE,
+  MASH_TABLE_SCROLL,
+  MASH_TH,
+  MASH_TH_CENTER,
+  MASH_TH_ACTIONS,
+  MASH_TD,
+  MASH_TD_AMOUNT,
+  MASH_TD_ACTIONS,
+  MASH_EMPTY_ROW,
+} from '@/lib/ui/mash-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -169,40 +181,38 @@ export function CategoriesTab() {
         الصفوف باللون الأحمر: المخزون ≤ الحد الأدنى.
       </p>
 
+      <DataPanel noPadding>
       <div
         ref={containerRef}
-        className="overflow-auto border border-gray-200 rounded-lg bg-white"
+        className={MASH_TABLE_SCROLL}
         style={{ height: 'calc(100vh - 360px)', minHeight: 320 }}
       >
-        <table className="w-full text-sm border-collapse">
-          <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+        <table className={MASH_TABLE}>
+          <thead>
             <tr>
-              <th className="px-3 py-2.5 text-right font-semibold border-b">الاسم</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b">تفاصيل</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b">سعر البيع</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b">حد أدنى</th>
-              <th className="px-3 py-2.5 text-right font-semibold border-b">مخزون</th>
-              <th className="px-3 py-2.5 text-center font-semibold border-b w-28">إجراءات</th>
+              <th className={MASH_TH}>الاسم</th>
+              <th className={`${MASH_TD} col-text`}>تفاصيل</th>
+              <th className={`${MASH_TH_CENTER} col-amount`}>تجزئة</th>
+              <th className={`${MASH_TH_CENTER} col-amount`}>موزع</th>
+              <th className={`${MASH_TH_CENTER} col-amount`}>حد أدنى</th>
+              <th className={`${MASH_TH_CENTER} col-amount`}>مخزون</th>
+              <th className={MASH_TH_ACTIONS}>إجراءات</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
-              <tr>
-                <td colSpan={6} className="py-12 text-center text-muted-foreground">
-                  جارٍ التحميل…
-                </td>
+              <tr className={MASH_EMPTY_ROW}>
+                <td colSpan={7}>جارٍ التحميل…</td>
               </tr>
             )}
             {!isLoading && products.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-12 text-center text-muted-foreground">
-                  لا توجد فئات
-                </td>
+              <tr className={MASH_EMPTY_ROW}>
+                <td colSpan={7}>لا توجد فئات</td>
               </tr>
             )}
             {paddingTop > 0 && (
               <tr aria-hidden>
-                <td style={{ height: paddingTop }} colSpan={6} />
+                <td style={{ height: paddingTop }} colSpan={7} />
               </tr>
             )}
             {virtualItems.map((vItem) => {
@@ -213,24 +223,29 @@ export function CategoriesTab() {
                 <tr
                   key={row.id}
                   style={{ height: vItem.size }}
-                  className={`border-b ${lowStock ? 'bg-red-50' : 'hover:bg-mash-page'}`}
+                  className={lowStock ? 'bg-mash-danger-bg' : undefined}
                 >
-                  <td className="px-3 py-2 font-medium">{row.name}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground max-w-xs truncate">
+                  <td className={`${MASH_TD} font-medium`}>{row.name}</td>
+                  <td className={`${MASH_TD} text-xs text-muted-foreground`}>
                     {formatAttributes(row.attributes)}
                   </td>
-                  <td className="px-3 py-2 tabular-nums">{formatMoney(row.sale_price)}</td>
-                  <td className="px-3 py-2 tabular-nums">
+                  <td className={`${MASH_TD_AMOUNT}`}>
+                    {formatMoney(row.sale_price)}
+                  </td>
+                  <td className={`${MASH_TD_AMOUNT}`}>
+                    {formatMoney(row.distributor_price)}
+                  </td>
+                  <td className={MASH_TD_AMOUNT}>
                     {row.min_quantity.toLocaleString('ar-EG')}
                   </td>
                   <td
-                    className={`px-3 py-2 tabular-nums font-semibold ${
-                      lowStock ? 'text-red-700' : ''
+                    className={`${MASH_TD_AMOUNT} font-semibold ${
+                      lowStock ? 'text-mash-danger-text' : ''
                     }`}
                   >
                     {row.quantity_in_stock.toLocaleString('ar-EG')}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className={MASH_TD_ACTIONS}>
                     <div className="flex items-center justify-center gap-1">
                       <PermissionGuard permission="manage_card_inventory">
                         <Button
@@ -264,12 +279,13 @@ export function CategoriesTab() {
             })}
             {paddingBottom > 0 && (
               <tr aria-hidden>
-                <td style={{ height: paddingBottom }} colSpan={6} />
+                <td style={{ height: paddingBottom }} colSpan={7} />
               </tr>
             )}
           </tbody>
         </table>
       </div>
+      </DataPanel>
 
       <CategoryFormModal
         open={modalMode === 'add'}

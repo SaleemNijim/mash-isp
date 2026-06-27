@@ -8,6 +8,7 @@ import { RefreshCw, Search, Upload, CheckCircle2, Wallet, ExternalLink, Plus } f
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
+import { usePermissions } from '@/hooks/usePermissions'
 import { AccountSelector } from '@/components/subscriptions/AccountSelector'
 import {
   SettleCustomerDebtModal,
@@ -25,6 +26,18 @@ import {
 } from '@/lib/pending-tasks/inbox'
 import { invalidateDebtQueries } from '@/lib/debts/invalidate-debt-queries'
 import { formatMoney } from '@/lib/format-money'
+import { DataPanel } from '@/components/shared/DataPanel'
+import {
+  MASH_TABLE,
+  MASH_TABLE_SCROLL,
+  MASH_TH,
+  MASH_TH_CENTER,
+  MASH_TH_ACTIONS,
+  MASH_TD,
+  MASH_TD_AMOUNT,
+  MASH_TD_ACTIONS,
+  MASH_EMPTY_ROW,
+} from '@/lib/ui/mash-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -59,6 +72,31 @@ function formatDateTime(iso: string | null): string {
 }
 
 export default function PendingTasksPage() {
+  const hasPermission = usePermissions((s) => s.hasPermission)
+  const role = usePermissions((s) => s.role)
+  const loading = usePermissions((s) => s.loading)
+  const allowed =
+    role === 'admin' ||
+    role === 'super_admin' ||
+    hasPermission('view_pending_tasks') ||
+    hasPermission('confirm_payments')
+
+  if (loading) {
+    return (
+      <div dir="rtl" className="p-8 text-center text-muted-foreground">
+        جارٍ التحميل...
+      </div>
+    )
+  }
+
+  if (!allowed) {
+    return (
+      <div dir="rtl" className="p-8 text-center text-muted-foreground">
+        ليس لديك صلاحية عرض المهام المعلقة — اطلب من المدير منحك الصلاحية.
+      </div>
+    )
+  }
+
   return <PendingTasksContent />
 }
 
@@ -254,7 +292,7 @@ function PendingTasksContent() {
     <div dir="rtl" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">المهام المعلقة</h1>
+          <h1 className="mash-page-title">المهام المعلقة</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {filtered.length.toLocaleString('ar-EG')} بند يحتاج متابعة — مهام، ديون، وتحويلات
             بانتظار الإثبات
@@ -304,42 +342,29 @@ function PendingTasksContent() {
         onChange={(v) => setKindFilter(v as KindFilter)}
       />
 
-      <div className="overflow-auto border border-gray-200 rounded-lg bg-white max-h-[480px]">
-        <table className="w-full text-sm border-collapse">
-          <thead className="sticky top-0 z-10 bg-gray-50 shadow-sm">
+      <DataPanel noPadding>
+      <div className={`${MASH_TABLE_SCROLL} max-h-[480px]`}>
+        <table className={MASH_TABLE}>
+          <thead>
             <tr>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                الموضوع
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                النوع
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                المبلغ
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                التاريخ / الاستحقاق
-              </th>
-              <th className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b">
-                الحالة
-              </th>
-              <th className="px-3 py-2.5 text-center font-semibold text-gray-700 border-b w-56">
-                إجراءات
-              </th>
+              <th className={MASH_TH}>الموضوع</th>
+              <th className={MASH_TH}>النوع</th>
+              <th className={`${MASH_TH_CENTER} col-amount`}>المبلغ</th>
+              <th className={MASH_TH}>التاريخ / الاستحقاق</th>
+              <th className={MASH_TH}>الحالة</th>
+              <th className={MASH_TH_ACTIONS}>إجراءات</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
-              <tr>
-                <td colSpan={6} className="py-12 text-center text-muted-foreground">
-                  جارٍ التحميل…
-                </td>
+              <tr className={MASH_EMPTY_ROW}>
+                <td colSpan={6}>جارٍ التحميل…</td>
               </tr>
             )}
 
             {!isLoading && filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-12 text-center text-muted-foreground">
+              <tr className={MASH_EMPTY_ROW}>
+                <td colSpan={6}>
                   <p>لا توجد بنود تحتاج متابعة حالياً</p>
                   <p className="text-xs mt-2">
                     تظهر هنا: مهام «إشعار لاحقاً»، ديون غير مسدّدة، وتحويلات بدون إثبات
@@ -349,8 +374,8 @@ function PendingTasksContent() {
             )}
 
             {filtered.map((row) => (
-              <tr key={row.id} className="hover:bg-mash-page border-b border-gray-100">
-                <td className="px-3 py-2">
+              <tr key={row.id}>
+                <td className={MASH_TD}>
                   {row.customer_id ? (
                     <Link
                       href={`/subscriptions/customer/${row.customer_id}`}
@@ -376,7 +401,7 @@ function PendingTasksContent() {
                     </div>
                   )}
                 </td>
-                <td className="px-3 py-2">
+                <td className={MASH_TD}>
                   <Badge variant="outline" className="text-xs font-normal">
                     {inboxKindLabel(row.kind)}
                   </Badge>
@@ -391,10 +416,10 @@ function PendingTasksContent() {
                     </p>
                   )}
                 </td>
-                <td className="px-3 py-2 tabular-nums font-medium">
+                <td className={`${MASH_TD_AMOUNT} font-medium`}>
                   {row.amount > 0 ? formatMoney(row.amount) : '—'}
                 </td>
-                <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                <td className={`${MASH_TD} text-xs text-muted-foreground whitespace-nowrap`}>
                   {row.kind === 'task' && row.due_at ? (
                     <>
                       <span className="block text-foreground">استحقاق: {formatDateTime(row.due_at)}</span>
@@ -403,7 +428,7 @@ function PendingTasksContent() {
                     formatDateTime(row.recorded_at)
                   )}
                 </td>
-                <td className="px-3 py-2">
+                <td className={MASH_TD}>
                   <Badge
                     variant={
                       row.kind === 'debt'
@@ -420,7 +445,7 @@ function PendingTasksContent() {
                     <span className="mr-1 text-xs text-green-600">• إثبات مرفوع</span>
                   )}
                 </td>
-                <td className="px-3 py-2">
+                <td className={MASH_TD_ACTIONS}>
                   <div className="flex items-center justify-center gap-1 flex-wrap">
                     {row.kind === 'task' && (
                       <>
@@ -499,6 +524,7 @@ function PendingTasksContent() {
           </tbody>
         </table>
       </div>
+      </DataPanel>
 
       <Dialog
         open={!!uploadTarget}
