@@ -15,7 +15,9 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
           <p className="mash-page-description">{description}</p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {actions && (
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">{actions}</div>
+      )}
     </div>
   )
 }
