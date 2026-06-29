@@ -138,9 +138,9 @@ function WarehouseContent() {
     hasNextPage: itemsHasMore,
     fetchNextPage: itemsFetchMore,
     refetch: refetchItems,
-  } = useInfiniteVirtualData('warehouse_items', ['name', 'category'], debouncedSearch)
+  } = useInfiniteVirtualData<WarehouseItem>('warehouse_items', ['name', 'category'], debouncedSearch)
 
-  const items = allItems as WarehouseItem[]
+  const items = allItems
 
   const movementsQuery = useInfiniteQuery({
     queryKey: ['warehouse_movements', movementFilter],

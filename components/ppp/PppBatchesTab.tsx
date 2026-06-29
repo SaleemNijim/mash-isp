@@ -81,14 +81,14 @@ export function PppBatchesTab({ onViewUsernames }: PppBatchesTabProps) {
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteVirtualData(
+  } = useInfiniteVirtualData<PppBatchRow>(
     'ppp_batches',
     ['batch_number', 'notes'],
     debouncedSearch,
     { select: 'id, tenant_id, plan_id, batch_number, received_at, notes, is_deleted, created_at, ppp_plans(name, speed)' },
   )
 
-  const batches = allItems as PppBatchRow[]
+  const batches = allItems
   const batchIds = batches.map((b) => b.id)
 
   const { data: summaries = {} } = useQuery<Record<string, PppBatchSummary>>({
@@ -189,11 +189,15 @@ export function PppBatchesTab({ onViewUsernames }: PppBatchesTabProps) {
       : 0
 
   return (
-    <DataPanel
-      title="دفعات PPP"
-      description="استلام usernames — كل دفعة مرتبطة بفئة ومخزون معزول"
-      actions={
-        <>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-foreground">دفعات PPP</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            استلام usernames — كل دفعة مرتبطة بفئة ومخزون معزول
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void refetch()} className="gap-1.5">
             <RefreshCw size={14} />
             تحديث
@@ -202,9 +206,10 @@ export function PppBatchesTab({ onViewUsernames }: PppBatchesTabProps) {
             <PackagePlus size={14} />
             استلام دفعة
           </Button>
-        </>
-      }
-    >
+        </div>
+      </div>
+
+      <DataPanel className="p-4">
       <div className="relative max-w-md mb-3">
         <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -280,6 +285,7 @@ export function PppBatchesTab({ onViewUsernames }: PppBatchesTabProps) {
           </tbody>
         </table>
       </div>
+      </DataPanel>
 
       <ReceivePppBatchModal
         open={receiveOpen}
@@ -297,6 +303,6 @@ export function PppBatchesTab({ onViewUsernames }: PppBatchesTabProps) {
         confirmLabel="تأكيد الحذف النهائي"
         isPermanent={target?.permanent === true}
       />
-    </DataPanel>
+    </div>
   )
 }

@@ -27,7 +27,6 @@ import {
   attachProofToPayment,
   fetchLatestSubscriptionPayment,
 } from '@/lib/payment-proof'
-import { enqueueOp } from '@/lib/sync/engine'
 import { formatMoney } from '@/lib/format-money'
 import {
   isBankPayment,
@@ -434,11 +433,6 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
       }
 
       if (notifyLater) {
-        if (!navigator.onLine) {
-          toast.error('إشعار لاحقاً يتطلب اتصالاً بالإنترنت')
-          return
-        }
-
         const { error } = await supabase.rpc('record_unpaid_subscription_period', {
           p_subscription_id: subscription.id,
           p_mac_address: macAddress.trim() || null,
@@ -491,25 +485,6 @@ export function SubscriptionPeriodForm(props: SubscriptionPeriodFormProps) {
         p_balance_remaining: remaining,
         p_notes: notes.trim() || null,
         p_source_account_label: sourceAccountLabel.trim() || null,
-      }
-
-      if (!navigator.onLine) {
-        await enqueueOp('renew_subscription', {
-          subscription_id: subscription.id,
-          credential_id: rpcParams.p_credential_id,
-          amount: due,
-          method,
-          bank_account_id: rpcParams.p_bank_account_id,
-          mac_address: rpcParams.p_mac_address,
-          cash_amount: rpcParams.p_cash_amount,
-          app_amount: rpcParams.p_app_amount,
-          discount_amount: rpcParams.p_discount_amount,
-          balance_remaining: rpcParams.p_balance_remaining,
-          notes: rpcParams.p_notes,
-        })
-        toast.success('تم حفظ التجديد — سيُزامَن عند عودة الاتصال')
-        router.push(cancelHref)
-        return
       }
 
       const { error } = await supabase.rpc('renew_subscription', rpcParams)

@@ -18,7 +18,6 @@ import {
   isDashboardNavActive,
   type DashboardNavIcon,
 } from '@/lib/navigation'
-import { NetworkIndicator } from '@/components/offline/NetworkIndicator'
 import { MessageNotificationBell } from '@/components/messages/MessageNotificationBell'
 import { TrialBanner } from '@/components/trial/TrialBanner'
 import { IdleTimeout } from '@/components/shared/IdleTimeout'
@@ -30,7 +29,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import { fetchPendingInbox } from '@/lib/pending-tasks/inbox'
-import { initSyncEngine, runSyncEngine } from '@/lib/sync/engine'
 
 const NAV_ICONS: Record<DashboardNavIcon, LucideIcon> = {
   LayoutDashboard,
@@ -67,12 +65,6 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const isCashier = role === 'employee'
 
   useRealtimeChannels(tenant?.id ?? '')
-
-  useEffect(() => {
-    const cleanup = initSyncEngine()
-    void runSyncEngine()
-    return cleanup
-  }, [])
 
   useEffect(() => {
     void loadPermissions()
@@ -247,7 +239,6 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
           <MessageNotificationBell href="/messages" />
         </header>
 
-        <NetworkIndicator />
         {!isCashier && <TrialBanner />}
 
         <main className="flex-1 p-4 lg:p-6">{children}</main>

@@ -70,7 +70,7 @@ function normalizeJoin<T>(value: T | T[] | null | undefined): T | null {
 async function updateSyncRecord(
   admin: SupabaseClient,
   tenantId: string,
-  values: Record<string, unknown>,
+  values: Record<string, unknown> | DriveSyncTokens,
 ): Promise<void> {
   const { error } = await admin.from('tenant_drive_sync').update(values).eq('tenant_id', tenantId)
   if (error) throw new Error(error.message)

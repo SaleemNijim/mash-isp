@@ -26,6 +26,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CardPriceBreakdown } from '@/components/cards/CardPriceBreakdown'
+import {
+  DebtPartySection,
+  defaultDebtPartyValue,
+  validateDebtParty,
+  type DebtPartyValue,
+} from '@/components/sales/DebtPartySection'
 
 interface ProductOption {
   id: string
@@ -67,6 +73,7 @@ export function RetailCardSaleModal({
   const [attachProof, setAttachProof] = useState(false)
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [notes, setNotes] = useState('')
+  const [debtParty, setDebtParty] = useState<DebtPartyValue>(defaultDebtPartyValue)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -78,6 +85,7 @@ export function RetailCardSaleModal({
     setAttachProof(false)
     setProofFile(null)
     setNotes('')
+    setDebtParty(defaultDebtPartyValue())
   }, [open, fixedProductId])
 
   const { data: product } = useQuery<ProductOption | null>({
@@ -134,6 +142,13 @@ export function RetailCardSaleModal({
       return
     }
 
+    const dbMethod = toDbPaymentMethod(paymentMethod)
+    const debtError = validateDebtParty(dbMethod, debtParty)
+    if (debtError) {
+      toast.error(debtError)
+      return
+    }
+
     const parsed = parsePaymentMethodValue(paymentMethod)
 
     setLoading(true)
@@ -148,18 +163,36 @@ export function RetailCardSaleModal({
         )
       }
 
+      const dueAtIso =
+        dbMethod === 'debt' && debtParty.dueAt
+          ? new Date(debtParty.dueAt).toISOString()
+          : null
+
       const { error } = await supabase.rpc('sell_retail_cards', {
         p_product_id: fixedProductId,
         p_quantity: qty,
         p_unit_price: price,
         p_sale_type: saleType,
-        p_method: toDbPaymentMethod(paymentMethod),
+        p_method: dbMethod,
         p_bank_account_id: parsed.bankAccountId,
         p_notes: notes.trim() || null,
         p_proof_url: proofUrl,
         p_batch_id: null,
         p_nonce: crypto.randomUUID(),
         p_source_account_label: sourceAccountLabel.trim() || null,
+        p_customer_id:
+          dbMethod === 'debt' && debtParty.mode === 'customer'
+            ? debtParty.customerId
+            : null,
+        p_contact_label:
+          dbMethod === 'debt' && debtParty.mode === 'contact'
+            ? debtParty.contactLabel.trim()
+            : null,
+        p_contact_phone:
+          dbMethod === 'debt' && debtParty.mode === 'contact'
+            ? debtParty.contactPhone.trim() || null
+            : null,
+        p_due_at: dueAtIso,
       })
       if (error) throw error
 
@@ -247,6 +280,14 @@ export function RetailCardSaleModal({
             onProofFileChange={setProofFile}
             disabled={loading}
           />
+
+          {paymentMethod === 'debt' && (
+            <DebtPartySection
+              value={debtParty}
+              onChange={setDebtParty}
+              disabled={loading}
+            />
+          )}
 
           <div className="space-y-1.5">
             <Label>ملاحظات</Label>

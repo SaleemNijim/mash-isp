@@ -120,7 +120,7 @@ export function PppInventoryPage() {
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteVirtualData('internet_credentials', ['username'], debouncedSearch, {
+  } = useInfiniteVirtualData<CredentialRowRaw>('internet_credentials', ['username'], debouncedSearch, {
     filters: {
       type: 'bb',
       ...(planFilterId ? { plan_id: planFilterId } : {}),
@@ -142,7 +142,11 @@ export function PppInventoryPage() {
       if (error) throw error
       const map: Record<string, CredentialAssignee> = {}
       for (const row of data ?? []) {
-        const customer = row.customers as { id: string; name: string } | null
+        const customersRaw = row.customers as
+          | { id: string; name: string }
+          | { id: string; name: string }[]
+          | null
+        const customer = Array.isArray(customersRaw) ? customersRaw[0] : customersRaw
         if (!customer?.id) continue
         map[row.credential_id as string] = {
           customerId: customer.id,
@@ -156,7 +160,7 @@ export function PppInventoryPage() {
 
   const rows = useMemo(
     () =>
-      (rawItems as CredentialRowRaw[]).map((r) => ({
+      rawItems.map((r) => ({
         ...r,
         plan_name: planNameFromRow(r.ppp_plans),
         assignee: assigneeByCredentialId[r.id] ?? null,

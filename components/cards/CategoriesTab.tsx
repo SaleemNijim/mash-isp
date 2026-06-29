@@ -68,9 +68,9 @@ export function CategoriesTab() {
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteVirtualData('card_products', ['name'], debouncedSearch)
+  } = useInfiniteVirtualData<CardProductRow>('card_products', ['name'], debouncedSearch)
 
-  const products = allItems as CardProductRow[]
+  const products = allItems
 
   const virtualizer = useVirtualizer({
     count: products.length,

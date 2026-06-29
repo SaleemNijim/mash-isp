@@ -238,6 +238,7 @@ function PendingTasksContent() {
         uploadTarget.task_id,
         file,
       )
+      if (!paymentId) throw new Error('payment_missing')
       await attachProofToPayment(supabase, tenant.id, paymentId, proofUrl, user.id)
 
       toast.success('تم رفع إشعار الدفع')
@@ -277,7 +278,7 @@ function PendingTasksContent() {
   }
 
   const openDebtSettle = (item: PendingInboxItem) => {
-    if (item.kind !== 'debt' || !item.debt_id) return
+    if (item.kind !== 'debt' || !item.debt_id || !item.customer_id) return
     setDebtTarget({
       id: item.debt_id,
       customer_id: item.customer_id,

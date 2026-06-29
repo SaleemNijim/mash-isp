@@ -11,7 +11,7 @@ export function useCustomerHubData(search: string) {
   const supabase = createClient()
   const { data: tenant } = useTenant()
 
-  const customerQuery = useInfiniteVirtualData(
+  const customerQuery = useInfiniteVirtualData<CustomerRecord>(
     'customers',
     ['name', 'phone', 'address'],
     search,
@@ -66,7 +66,7 @@ export function useCustomerHubData(search: string) {
     staleTime: 30_000,
   })
 
-  const customers = customerQuery.allItems as CustomerRecord[]
+  const customers = customerQuery.allItems
 
   return {
     ...customerQuery,

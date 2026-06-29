@@ -66,9 +66,9 @@ export function PppCategoriesTab() {
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteVirtualData('ppp_plans', ['name', 'speed'], debouncedSearch)
+  } = useInfiniteVirtualData<PppPlan>('ppp_plans', ['name', 'speed'], debouncedSearch)
 
-  const plans = allItems as PppPlan[]
+  const plans = allItems
 
   const { data: batchCounts = {} } = useQuery<Record<string, number>>({
     queryKey: ['ppp-plan-batch-counts', tenant?.id],
@@ -170,11 +170,15 @@ export function PppCategoriesTab() {
       : 0
 
   return (
-    <DataPanel
-      title="فئات PPP"
-      description="أصناف الاشتراك — السعر والحد الأدنى. ثم استلم usernames عبر «الدفعات»."
-      actions={
-        <>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-foreground">فئات PPP</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            أصناف الاشتراك — السعر والحد الأدنى. ثم استلم usernames عبر «الدفعات».
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void refetch()} className="gap-1.5">
             <RefreshCw size={14} />
             تحديث
@@ -183,9 +187,10 @@ export function PppCategoriesTab() {
             <Plus size={14} />
             فئة جديدة
           </Button>
-        </>
-      }
-    >
+        </div>
+      </div>
+
+      <DataPanel className="p-4">
       <div className="relative max-w-md mb-3">
         <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -278,6 +283,7 @@ export function PppCategoriesTab() {
           </tbody>
         </table>
       </div>
+      </DataPanel>
 
       <PppPlanFormModal
         open={modalMode !== null}
@@ -300,6 +306,6 @@ export function PppCategoriesTab() {
         confirmLabel="تأكيد الحذف النهائي"
         isPermanent={target?.permanent === true}
       />
-    </DataPanel>
+    </div>
   )
 }

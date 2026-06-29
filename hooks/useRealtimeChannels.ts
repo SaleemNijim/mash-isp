@@ -4,10 +4,6 @@ import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 
-function handleMacChange(payload: unknown) {
-  console.log('[Realtime] MAC changed:', payload)
-}
-
 export function useRealtimeChannels(tenantId: string) {
   const queryClient = useQueryClient()
 
@@ -20,7 +16,10 @@ export function useRealtimeChannels(tenantId: string) {
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'router_mac_history',
         filter: `tenant_id=eq.${tenantId}`,
-      }, handleMacChange)
+      }, () => {
+        queryClient.invalidateQueries({ queryKey: ['network_routers'] })
+        queryClient.invalidateQueries({ queryKey: ['router-mac-history'] })
+      })
       .subscribe()
 
     const taskChannel = supabase

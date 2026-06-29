@@ -10,6 +10,19 @@ export interface SaleRow {
   discountPercent?: number | null
   created_at: string
   performerId?: string | null
+  paymentMethod?: string | null
+  debtorName?: string | null
+  /** بيانات التعديل — بيع تجزئة فقط */
+  retailEdit?: {
+    quantity: number
+    unitPrice: number
+    method: string
+    notes: string | null
+    customerId: string | null
+    contactLabel: string | null
+    contactPhone: string | null
+    dueAt: string | null
+  }
 }
 
 export interface SalesBucket {
@@ -25,6 +38,19 @@ export interface SalesSummary {
   subscriptions: SalesBucket
   renewals: SalesBucket
   newSubscriptions: SalesBucket
+}
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: 'نقدي',
+  debt: 'دين',
+  reflect: 'ريفلكت',
+  jawwal_pay: 'جوال باي',
+  bank: 'تحويل',
+}
+
+export function paymentMethodLabel(method: string | null | undefined): string | null {
+  if (!method) return null
+  return PAYMENT_METHOD_LABELS[method] ?? method
 }
 
 function emptyBucket(): SalesBucket {
@@ -73,7 +99,11 @@ export async function fetchSalesInRange(
     supabase
       .from('card_retail_sales')
       .select(
-        'id, total_amount, sale_type, discount_percent, created_at, sold_by, card_products(name)',
+        `id, total_amount, sale_type, discount_percent, created_at, sold_by, method, notes,
+        quantity, unit_price, customer_id, contact_label, contact_phone,
+        card_products(name),
+        customers(name),
+        pending_tasks(due_at)`,
       )
       .eq('tenant_id', tenantId)
       .eq('is_deleted', false)
@@ -118,6 +148,16 @@ export async function fetchSalesInRange(
   for (const r of retailRes.data ?? []) {
     const productRaw = r.card_products as { name?: string } | { name?: string }[] | null
     const product = Array.isArray(productRaw) ? productRaw[0] : productRaw
+    const customerRaw = r.customers as { name?: string } | { name?: string }[] | null
+    const customer = Array.isArray(customerRaw) ? customerRaw[0] : customerRaw
+    const taskRaw = r.pending_tasks as { due_at?: string } | { due_at?: string }[] | null
+    const task = Array.isArray(taskRaw) ? taskRaw[0] : taskRaw
+    const method = (r.method as string) ?? 'cash'
+    const debtorName =
+      customer?.name?.trim() ||
+      (r.contact_label as string | null)?.trim() ||
+      (method === 'debt' ? 'دين — غير محدد' : null)
+
     rows.push({
       id: r.id,
       kind: 'retail',
@@ -126,6 +166,18 @@ export async function fetchSalesInRange(
       discountPercent: r.discount_percent != null ? Number(r.discount_percent) : null,
       created_at: r.created_at,
       performerId: r.sold_by as string | null,
+      paymentMethod: method,
+      debtorName: method === 'debt' ? debtorName : null,
+      retailEdit: {
+        quantity: Number(r.quantity),
+        unitPrice: Number(r.unit_price),
+        method,
+        notes: (r.notes as string | null) ?? null,
+        customerId: (r.customer_id as string | null) ?? null,
+        contactLabel: (r.contact_label as string | null) ?? null,
+        contactPhone: (r.contact_phone as string | null) ?? null,
+        dueAt: task?.due_at ?? null,
+      },
     })
   }
 

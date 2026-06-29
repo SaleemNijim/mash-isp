@@ -80,13 +80,13 @@ export function BatchesTab() {
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteVirtualData(
+  } = useInfiniteVirtualData<CardBatchRow>(
     'card_batches',
     ['batch_number', 'notes'],
     debouncedSearch,
   )
 
-  const batches = allItems as CardBatchRow[]
+  const batches = allItems
   const batchIds = batches.map((b) => b.id)
 
   const { data: summaries = {} } = useQuery<Record<string, BatchSummary>>({

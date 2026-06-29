@@ -81,13 +81,13 @@ function CardSalesContent() {
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteVirtualData(
+  } = useInfiniteVirtualData<DistributorSale>(
     'card_distributor_sales',
     ['distributor_name'],
     debouncedSearch,
   )
 
-  const sales = allItems as DistributorSale[]
+  const sales = allItems
 
   const virtualizer = useVirtualizer({
     count: sales.length,

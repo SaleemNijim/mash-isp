@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ShieldCheck } from 'lucide-react'
@@ -16,6 +16,20 @@ import { Label } from '@/components/ui/label'
 const PENDING_RESET_EMAIL_KEY = 'mash_pending_reset_email'
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <AuthShell>
+          <p className="text-center text-sm text-[#4A6B60]">جارٍ التحميل...</p>
+        </AuthShell>
+      }
+    >
+      <ResetPasswordForm />
+    </Suspense>
+  )
+}
+
+function ResetPasswordForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')

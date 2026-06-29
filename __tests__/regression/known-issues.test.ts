@@ -18,21 +18,21 @@ describe('known-issues regression suite', () => {
 
   it('② register/page.tsx: session → complete setup; no session → verify-email', () => {
     const source = fs.readFileSync(
-      path.join(PROJECT_ROOT, 'app', '(auth)', 'register', 'page.tsx'),
+      path.join(PROJECT_ROOT, 'app', 'register', 'page.tsx'),
       'utf8',
     )
 
     expect(source).toContain('if (data.session && data.user)')
     expect(source).toContain('fetchOrCompleteUserProfile')
     expect(source).toContain('resolvePostLoginPath')
-    expect(source).toContain("router.push('/verify-email')")
+    expect(source).toContain('router.push(`/verify-email?email=${encodeURIComponent(email)}`)')
 
     const sessionBlock = source.slice(
       source.indexOf('if (data.session && data.user)'),
-      source.indexOf("router.push('/verify-email')"),
+      source.indexOf('router.push(`/verify-email?email=${encodeURIComponent(email)}`)'),
     )
     expect(sessionBlock).toContain('fetchOrCompleteUserProfile')
-    expect(sessionBlock).not.toContain("router.push('/verify-email')")
+    expect(sessionBlock).not.toContain('router.push(`/verify-email?email=${encodeURIComponent(email)}`)')
   })
 
   it('③ auth/callback/route.ts exists and completes user setup before redirect', () => {

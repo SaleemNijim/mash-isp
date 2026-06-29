@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Mail } from 'lucide-react'
@@ -18,6 +18,20 @@ import { Label } from '@/components/ui/label'
 const PENDING_EMAIL_KEY = 'mash_pending_verify_email'
 
 export default function VerifyEmailPage() {
+  return (
+    <Suspense
+      fallback={
+        <AuthShell>
+          <p className="text-center text-sm text-[#4A6B60]">جارٍ التحميل...</p>
+        </AuthShell>
+      }
+    >
+      <VerifyEmailForm />
+    </Suspense>
+  )
+}
+
+function VerifyEmailForm() {
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')

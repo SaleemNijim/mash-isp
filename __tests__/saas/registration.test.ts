@@ -45,7 +45,7 @@ describe('registration page contract (static)', () => {
     const { readFileSync } = await import('node:fs')
     const { join } = await import('node:path')
     const source = readFileSync(
-      join(process.cwd(), 'app', '(auth)', 'register', 'page.tsx'),
+      join(process.cwd(), 'app', 'register', 'page.tsx'),
       'utf8',
     )
     expect(source).toContain('/verify-email')

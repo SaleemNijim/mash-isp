@@ -93,7 +93,7 @@ export function PppUsernamesTab({ batchId, onBatchChange }: PppUsernamesTabProps
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteVirtualData('internet_credentials', ['username'], debouncedSearch, {
+  } = useInfiniteVirtualData<CredentialListItem>('internet_credentials', ['username'], debouncedSearch, {
     filters: batchId ? { type: 'bb', batch_id: batchId } : undefined,
     enabled: batchQueryEnabled,
   })
@@ -111,7 +111,11 @@ export function PppUsernamesTab({ batchId, onBatchChange }: PppUsernamesTabProps
       if (error) throw error
       const map: Record<string, CredentialAssignee> = {}
       for (const row of data ?? []) {
-        const customer = row.customers as { id: string; name: string } | null
+        const customersRaw = row.customers as
+          | { id: string; name: string }
+          | { id: string; name: string }[]
+          | null
+        const customer = Array.isArray(customersRaw) ? customersRaw[0] : customersRaw
         if (!customer?.id) continue
         map[row.credential_id as string] = {
           customerId: customer.id,
@@ -125,7 +129,7 @@ export function PppUsernamesTab({ batchId, onBatchChange }: PppUsernamesTabProps
 
   const rows = useMemo(
     () =>
-      (rawItems as CredentialListItem[]).map((r) => ({
+      rawItems.map((r) => ({
         ...r,
         assignee: assigneeByCredentialId[r.id] ?? null,
       })),
@@ -259,11 +263,15 @@ export function PppUsernamesTab({ batchId, onBatchChange }: PppUsernamesTabProps
     virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0
 
   return (
-    <DataPanel
-      title="usernames"
-      description="عرض usernames دفعة واحدة — مخزون معزول لكل دفعة"
-      actions={
-        <>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-foreground">usernames</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            عرض usernames دفعة واحدة — مخزون معزول لكل دفعة
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void refetch()} className="gap-1.5">
             <RefreshCw size={14} />
             تحديث
@@ -290,9 +298,10 @@ export function PppUsernamesTab({ batchId, onBatchChange }: PppUsernamesTabProps
             <Plus size={14} />
             إضافة
           </Button>
-        </>
-      }
-    >
+        </div>
+      </div>
+
+      <DataPanel className="p-4">
       <div className="flex flex-wrap gap-3 mb-3">
         <div className="min-w-[240px] flex-1 max-w-md space-y-1.5">
           <Label>الدفعة</Label>
@@ -393,6 +402,7 @@ export function PppUsernamesTab({ batchId, onBatchChange }: PppUsernamesTabProps
           </tbody>
         </table>
       </div>
+      </DataPanel>
 
       <DeleteConfirmModal
         open={open}
@@ -413,6 +423,6 @@ export function PppUsernamesTab({ batchId, onBatchChange }: PppUsernamesTabProps
         isPermanent
         consequences="حذف نهائي لكل username في هذه الدفعة فقط."
       />
-    </DataPanel>
+    </div>
   )
 }

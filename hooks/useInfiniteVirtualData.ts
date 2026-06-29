@@ -10,7 +10,7 @@ export type InfiniteVirtualOptions = {
   enabled?: boolean
 }
 
-export function useInfiniteVirtualData<T extends Record<string, unknown> = Record<string, unknown>>(
+export function useInfiniteVirtualData<T = Record<string, unknown>>(
   tableName: string,
   searchFields: string[],
   search: string,

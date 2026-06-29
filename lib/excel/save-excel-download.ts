@@ -1,5 +1,15 @@
 const EXCEL_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
+type SaveFilePickerWindow = Window & {
+  showSaveFilePicker: (options?: {
+    suggestedName?: string
+    types?: Array<{
+      description?: string
+      accept: Record<string, string[]>
+    }>
+  }) => Promise<FileSystemFileHandle>
+}
+
 export type ExcelSaveOutcome = 'saved' | 'cancelled'
 
 function ensureXlsxExtension(fileName: string): string {
@@ -18,7 +28,7 @@ export async function promptSaveExcelFile(
 
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
     try {
-      const handle = await window.showSaveFilePicker({
+      const handle = await (window as SaveFilePickerWindow).showSaveFilePicker({
         suggestedName: fileName,
         types: [
           {

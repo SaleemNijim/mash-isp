@@ -178,7 +178,7 @@ function NetworkRoutersContent() {
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
-  } = useInfiniteVirtualData(
+  } = useInfiniteVirtualData<RouterListRow>(
     'network_routers',
     [],
     '',
@@ -195,7 +195,7 @@ function NetworkRoutersContent() {
   }, [hasNextPage, isFetchingNextPage, isLoading, fetchNextPage, allItems.length])
 
   const rows = useMemo(() => {
-    const items = allItems as RouterListRow[]
+    const items = allItems
     const filtered = debouncedSearch.trim()
       ? items.filter((row) => matchesNetworkRouterSearch(row, debouncedSearch))
       : items
@@ -657,7 +657,7 @@ function NetworkRoutersContent() {
       )}
 
       {parsed.mode === 'all' &&
-        (allItems as RouterListRow[]).some((r) => !r.port_id) && (
+        allItems.some((r) => !r.port_id) && (
         <p className="text-sm text-amber-800 dark:text-amber-200 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30 p-3">
           يوجد راوترات بدون بورت — لن تظهر في تبويب بورت محدد. اضغط «تعديل» واختر البورت.
         </p>

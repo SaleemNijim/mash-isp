@@ -2,11 +2,11 @@
 
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, Plus, RefreshCw, ShoppingCart } from 'lucide-react'
+import { CalendarDays, Pencil, Plus, RefreshCw, ShoppingCart } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
 import { usePermissions } from '@/hooks/usePermissions'
-import { fetchSalesInRange, type SaleRow } from '@/lib/sales/fetch-sales'
+import { fetchSalesInRange, paymentMethodLabel, type SaleRow } from '@/lib/sales/fetch-sales'
 import {
   dayEndISO,
   dayStartISO,
@@ -21,6 +21,7 @@ import { NewSaleModal, type SaleSelection } from '@/components/sales/NewSaleModa
 import { RetailCardSaleModal } from '@/components/sales/RetailCardSaleModal'
 import { SellToDistributorModal } from '@/components/card-sales/SellToDistributorModal'
 import { SubscriptionPickModal } from '@/components/sales/SubscriptionPickModal'
+import { EditRetailSaleModal, type RetailSaleEditTarget } from '@/components/sales/EditRetailSaleModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -53,10 +54,12 @@ function SalesLogList({
   sales,
   isLoading,
   emptyMessage,
+  onEditRetail,
 }: {
   sales: SaleRow[]
   isLoading: boolean
   emptyMessage: string
+  onEditRetail?: (sale: SaleRow) => void
 }) {
   if (isLoading) {
     return <p className="text-sm text-muted-foreground text-center py-10">جارٍ التحميل...</p>
@@ -71,20 +74,41 @@ function SalesLogList({
           key={`${sale.kind}-${sale.id}`}
           className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/20"
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {kindBadge(sale.kind)}
-            <span className="text-sm truncate">{sale.label}</span>
+            <div className="min-w-0">
+              <span className="text-sm truncate block">{sale.label}</span>
+              {sale.paymentMethod && (
+                <span className="text-xs text-muted-foreground">
+                  {paymentMethodLabel(sale.paymentMethod)}
+                  {sale.debtorName ? ` — ${sale.debtorName}` : ''}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="text-left shrink-0">
-            <p className="text-sm font-medium tabular-nums">
-              {formatAmount(sale.amount)}
-            </p>
-            {sale.discountPercent != null && sale.discountPercent > 0 && (
-              <p className="text-xs text-mash-success-text tabular-nums">
-                خصم {sale.discountPercent.toLocaleString('ar-EG')}%
-              </p>
+          <div className="flex items-center gap-2 shrink-0">
+            {sale.kind === 'retail' && sale.retailEdit && onEditRetail && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => onEditRetail(sale)}
+                title="تعديل"
+              >
+                <Pencil size={14} />
+              </Button>
             )}
-            <p className="text-xs text-muted-foreground">{formatTime(sale.created_at)}</p>
+            <div className="text-left">
+              <p className="text-sm font-medium tabular-nums">
+                {formatAmount(sale.amount)}
+              </p>
+              {sale.discountPercent != null && sale.discountPercent > 0 && (
+                <p className="text-xs text-mash-success-text tabular-nums">
+                  خصم {sale.discountPercent.toLocaleString('ar-EG')}%
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">{formatTime(sale.created_at)}</p>
+            </div>
           </div>
         </li>
       ))}
@@ -106,6 +130,7 @@ export default function SalesPage() {
   const [distributorOpen, setDistributorOpen] = useState(false)
   const [renewalOpen, setRenewalOpen] = useState(false)
   const [historyDate, setHistoryDate] = useState(yesterdayDateStr)
+  const [editRetail, setEditRetail] = useState<RetailSaleEditTarget | null>(null)
 
   const todayStart = todayStartISO()
   const todayEnd = dayEndISO(todayDateStr())
@@ -159,6 +184,24 @@ export default function SalesPage() {
     void refetchHistory()
     void queryClient.invalidateQueries({ queryKey: ['card-products-for-sale'] })
     void queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
+    void queryClient.invalidateQueries({ queryKey: ['debts-customers'] })
+    void queryClient.invalidateQueries({ queryKey: ['pending-inbox'] })
+  }
+
+  function handleEditRetail(sale: SaleRow) {
+    if (!sale.retailEdit) return
+    setEditRetail({
+      id: sale.id,
+      label: sale.label,
+      quantity: sale.retailEdit.quantity,
+      unitPrice: sale.retailEdit.unitPrice,
+      method: sale.retailEdit.method,
+      notes: sale.retailEdit.notes,
+      customerId: sale.retailEdit.customerId,
+      contactLabel: sale.retailEdit.contactLabel,
+      contactPhone: sale.retailEdit.contactPhone,
+      dueAt: sale.retailEdit.dueAt,
+    })
   }
 
   function handleRefresh() {
@@ -211,6 +254,7 @@ export default function SalesPage() {
             sales={todaySales}
             isLoading={isLoading}
             emptyMessage="لا توجد عمليات اليوم — اضغط «إضافة عملية بيع»"
+            onEditRetail={handleEditRetail}
           />
         </DataPanel>
       </div>
@@ -249,6 +293,7 @@ export default function SalesPage() {
             sales={historySales}
             isLoading={historyLoading}
             emptyMessage="لا توجد عمليات بيع في هذا اليوم"
+            onEditRetail={handleEditRetail}
           />
         </DataPanel>
       </div>
@@ -277,6 +322,13 @@ export default function SalesPage() {
       <SubscriptionPickModal
         open={renewalOpen}
         onClose={() => setRenewalOpen(false)}
+        onSuccess={handleSuccess}
+      />
+
+      <EditRetailSaleModal
+        open={editRetail !== null}
+        sale={editRetail}
+        onClose={() => setEditRetail(null)}
         onSuccess={handleSuccess}
       />
     </div>

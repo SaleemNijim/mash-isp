@@ -122,7 +122,6 @@ describe('DeleteConfirmModal (§1.1 B8)', () => {
       />,
     )
 
-    expect(screen.getByText('تأكيد الحذف النهائي')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'تأكيد الحذف النهائي' })).toBeDisabled()
   })
 })
