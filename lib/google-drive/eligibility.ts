@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getMyUserProfile } from '@/lib/auth/complete-user-setup'
 
+export type DriveAccessMode = 'admin' | 'sync'
+
 export interface DriveTenantEligibility {
   tenantId: string
   tenantName: string
@@ -8,11 +10,25 @@ export interface DriveTenantEligibility {
   reason: 'paid_plan' | 'trial' | 'inactive' | 'expired' | 'missing_plan'
 }
 
+export function isDriveRoleAllowed(
+  role: string | null | undefined,
+  access: DriveAccessMode,
+): boolean {
+  if (!role) return false
+  if (access === 'admin') return role === 'admin'
+  return role === 'admin' || role === 'employee'
+}
+
 export async function getDriveTenantEligibility(
   supabase: SupabaseClient,
+  access: DriveAccessMode = 'admin',
 ): Promise<DriveTenantEligibility | null> {
   const profile = await getMyUserProfile(supabase)
-  if (!profile?.tenant_id || profile.role !== 'admin' || !profile.is_active) {
+  if (
+    !profile?.tenant_id ||
+    !profile.is_active ||
+    !isDriveRoleAllowed(profile.role, access)
+  ) {
     return null
   }
 

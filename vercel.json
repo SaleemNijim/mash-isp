@@ -25,11 +25,5 @@
         }
       ]
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/google-drive/sync",
-      "schedule": "*/10 * * * *"
-    }
   ]
 }

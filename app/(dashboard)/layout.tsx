@@ -19,6 +19,7 @@ import {
   type DashboardNavIcon,
 } from '@/lib/navigation'
 import { MessageNotificationBell } from '@/components/messages/MessageNotificationBell'
+import { GoogleDriveSyncButton } from '@/components/settings/GoogleDriveSyncButton'
 import { TrialBanner } from '@/components/trial/TrialBanner'
 import { IdleTimeout } from '@/components/shared/IdleTimeout'
 import { useRealtimeChannels } from '@/hooks/useRealtimeChannels'
@@ -236,6 +237,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             <Menu size={20} />
           </button>
           <div className="flex-1" />
+          <GoogleDriveSyncButton />
           <MessageNotificationBell href="/messages" />
         </header>
 

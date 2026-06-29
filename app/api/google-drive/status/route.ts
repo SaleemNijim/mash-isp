@@ -6,7 +6,7 @@ import { getDriveTenantEligibility } from '@/lib/google-drive/eligibility'
 
 export async function GET() {
   const supabase = await createClient()
-  const eligibility = await getDriveTenantEligibility(supabase)
+  const eligibility = await getDriveTenantEligibility(supabase, 'sync')
 
   if (!eligibility) {
     return NextResponse.json({ error: 'غير مصرح' }, { status: 401 })

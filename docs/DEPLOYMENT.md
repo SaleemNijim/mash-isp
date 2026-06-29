@@ -30,7 +30,7 @@
 | `GOOGLE_DRIVE_CLIENT_ID` | Server | للمزامنة | OAuth Web Client من Google Cloud |
 | `GOOGLE_DRIVE_CLIENT_SECRET` | Server | للمزامنة | سر OAuth |
 | `GOOGLE_TOKEN_ENCRYPTION_KEY` | Server | للمزامنة | 32 بايت hex (64 حرف) أو base64 |
-| `CRON_SECRET` | Server | للمزامنة | يحمي `GET/POST /api/google-drive/sync` من Vercel Cron |
+| `CRON_SECRET` | Server | للمزامنة | يحمي `GET/POST /api/google-drive/sync` من pg_cron |
 
 ### التحقق من أمان service role
 
@@ -100,10 +100,33 @@ npx supabase migration list
 | `clean-nonces` | كل ساعة | تنظيف sync_nonces |
 | `notify-subscription-expiring` | يومياً | تنبيه انتهاء الاشتراك |
 | `purge-expired-deleted` | 03:30 يومياً | تفريغ سلة المحذوفات |
+| `google-drive-sync` | كل ساعة | مزامنة Google Drive لكل الشركات المربوطة |
 
 ```sql
 SELECT jobname, schedule FROM cron.job ORDER BY jobname;
 ```
+
+### 4.2.1 أسرار Vault لمزامنة Google Drive (pg_cron)
+
+بعد تطبيق migration `068_google_drive_sync_pg_cron.sql`، أضف في **SQL Editor**:
+
+```sql
+-- مرة واحدة — استبدل القيم بقيم الإنتاج
+SELECT vault.create_secret(
+  'https://YOUR_DOMAIN',
+  'google_drive_sync_app_url',
+  'MASH ISP — رابط التطبيق لمزامنة Drive'
+);
+
+SELECT vault.create_secret(
+  'YOUR_CRON_SECRET',
+  'google_drive_sync_cron_secret',
+  'MASH ISP — Bearer token لـ /api/google-drive/sync'
+);
+```
+
+يجب أن يطابق `YOUR_CRON_SECRET` قيمة `CRON_SECRET` في Vercel.  
+المزامنة التلقائية تعمل عبر **Supabase pg_cron + pg_net** — لا حاجة لـ Vercel Pro.
 
 ### 4.3 Vault
 
@@ -210,15 +233,17 @@ npm run build
 3. أضف متغيرات البيئة (القسم 2).
 4. **Deploy** → Preview أولاً.
 
-### 7.3 Vercel Cron
+### 7.3 مزامنة Google Drive (pg_cron)
 
-`vercel.json` يجدول مزامنة Google Drive كل 10 دقائق:
+المزامنة التلقائية **ليست** على Vercel Cron (خطة Hobby تسمح بمهمة واحدة يومياً فقط).  
+تُجدول كل **ساعة** عبر **Supabase pg_cron** → `GET /api/google-drive/sync` مع `Authorization: Bearer <CRON_SECRET>`.
 
-```json
-"path": "/api/google-drive/sync"
-```
+1. طبّق migration `068_google_drive_sync_pg_cron.sql`.
+2. فعّل امتداد **pg_net** من Database → Extensions (إن لم يُفعَّل تلقائياً).
+3. أضف أسرار Vault (القسم 4.2.1).
+4. تأكد من `CRON_SECRET` في Vercel.
 
-تأكد من ضبط `CRON_SECRET` في Vercel — الطلب يرسل `Authorization: Bearer <CRON_SECRET>`.
+زر **مزامنة Drive** في شريط التطبيق متاح للمسؤول والكاشير عندما يكون Drive مربوطاً.
 
 ### 7.4 Production
 
@@ -289,7 +314,7 @@ npm test
 - [ ] تأكيد البريد / استعادة كلمة المرور
 - [ ] رسائل super_admin ↔ شركات
 - [ ] بيع وتجديد اشتراكات + بطاقات
-- [ ] Google Drive: ربط / مزامنة / فصل
+- [ ] Google Drive: ربط (مسؤول) / مزامنة (مسؤول + كاشير) / فصل
 - [ ] انتهاء اشتراك → `/subscription-expired`
 
 ---
@@ -314,4 +339,4 @@ npm test
 | `docs/BLUEPRINT.md` | المواصفات الكاملة |
 | `docs/TESTING.md` | تشغيل الاختبارات وJWT تجريبية |
 | `.env.example` | قائمة المتغيرات |
-| `vercel.json` | Cron + Security Headers |
+| `vercel.json` | Security Headers |
