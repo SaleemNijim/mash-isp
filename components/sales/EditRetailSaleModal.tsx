@@ -326,7 +326,7 @@ export function EditRetailSaleModal({
               onClick={() => setVoidOpen(true)}
               disabled={loading}
             >
-              إلغاء هذه العملية بالكامل
+              حذف هذه العملية بالكامل
             </Button>
           </div>
 
@@ -346,9 +346,9 @@ export function EditRetailSaleModal({
         onClose={() => setVoidOpen(false)}
         onConfirm={handleVoid}
         recordName={sale?.label ?? 'عملية البيع'}
-        title="تأكيد إلغاء البيع"
-        confirmKeyword="إلغاء"
-        confirmLabel="تأكيد الإلغاء"
+        title="تأكيد حذف البيع"
+        confirmKeyword="حذف"
+        confirmLabel="تأكيد الحذف"
         consequences="سيُسترجَع المخزون ويُلغى الدين المرتبط إن وُجد. لا يمكن التراجع."
       />
     </>

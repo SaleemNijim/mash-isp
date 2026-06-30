@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { CalendarDays, Pencil, Plus, RefreshCw, ShoppingCart } from 'lucide-react'
@@ -24,7 +23,14 @@ import { RetailCardSaleModal } from '@/components/sales/RetailCardSaleModal'
 import { SellToDistributorModal } from '@/components/card-sales/SellToDistributorModal'
 import { SubscriptionPickModal } from '@/components/sales/SubscriptionPickModal'
 import { EditRetailSaleModal, type RetailSaleEditTarget } from '@/components/sales/EditRetailSaleModal'
-import { DeleteConfirmModal } from '@/components/shared/DeleteConfirmModal'
+import {
+  EditDistributorSaleModal,
+  type DistributorSaleEditTarget,
+} from '@/components/sales/EditDistributorSaleModal'
+import {
+  EditSubscriptionSaleModal,
+  type SubscriptionSaleEditTarget,
+} from '@/components/sales/EditSubscriptionSaleModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -128,7 +134,6 @@ function SalesLogList({
 export default function SalesPage() {
   const supabase = createClient()
   const queryClient = useQueryClient()
-  const router = useRouter()
   const { data: tenant } = useTenant()
   const role = usePermissions((s) => s.role)
   const userName = role === 'employee' ? 'كاشير' : 'مبيعات'
@@ -141,7 +146,8 @@ export default function SalesPage() {
   const [renewalOpen, setRenewalOpen] = useState(false)
   const [historyDate, setHistoryDate] = useState(yesterdayDateStr)
   const [editRetail, setEditRetail] = useState<RetailSaleEditTarget | null>(null)
-  const [voidDistributor, setVoidDistributor] = useState<{ id: string; label: string } | null>(null)
+  const [editDistributor, setEditDistributor] = useState<DistributorSaleEditTarget | null>(null)
+  const [editSubscription, setEditSubscription] = useState<SubscriptionSaleEditTarget | null>(null)
 
   const todayStart = todayStartISO()
   const todayEnd = dayEndISO(todayDateStr())
@@ -218,27 +224,20 @@ export default function SalesPage() {
     }
 
     if (sale.kind === 'distributor') {
-      setVoidDistributor({ id: sale.id, label: sale.label })
+      setEditDistributor({ id: sale.id, label: sale.label })
       return
     }
 
-    // اشتراك جديد / تجديد — التعديل عبر صفحة اشتراك المشترك
-    if (sale.customerId) {
-      router.push(`/subscriptions/customer/${sale.customerId}`)
-    } else {
-      toast.error('تعذّر فتح سجل المشترك لهذا الاشتراك')
+    if ((sale.kind === 'new' || sale.kind === 'renewal') && sale.customerId) {
+      setEditSubscription({
+        id: sale.id,
+        label: sale.label,
+        customerId: sale.customerId,
+      })
+      return
     }
-  }
 
-  async function handleVoidDistributor() {
-    if (!voidDistributor) return
-    const { error } = await supabase.rpc('void_distributor_sale', {
-      p_sale_id: voidDistributor.id,
-      p_nonce: crypto.randomUUID(),
-    })
-    if (error) throw error
-    toast.success('تم إلغاء بيع الموزع')
-    handleSuccess()
+    toast.error('تعذّر فتح نموذج التعديل لهذه العملية')
   }
 
   function handleRefresh() {
@@ -369,15 +368,18 @@ export default function SalesPage() {
         onSuccess={handleSuccess}
       />
 
-      <DeleteConfirmModal
-        open={voidDistributor !== null}
-        onClose={() => setVoidDistributor(null)}
-        onConfirm={handleVoidDistributor}
-        recordName={voidDistributor?.label ?? 'بيع الموزع'}
-        title="تأكيد إلغاء بيع الموزع"
-        confirmKeyword="إلغاء"
-        confirmLabel="تأكيد الإلغاء"
-        consequences="سيُسترجَع المخزون ويُعكَس رصيد الموزع أو الحساب البنكي. لتصحيح البيع أعد تسجيله من «إضافة عملية بيع». لا يمكن التراجع."
+      <EditDistributorSaleModal
+        open={editDistributor !== null}
+        sale={editDistributor}
+        onClose={() => setEditDistributor(null)}
+        onSuccess={handleSuccess}
+      />
+
+      <EditSubscriptionSaleModal
+        open={editSubscription !== null}
+        sale={editSubscription}
+        onClose={() => setEditSubscription(null)}
+        onSuccess={handleSuccess}
       />
     </div>
   )

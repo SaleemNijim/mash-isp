@@ -114,7 +114,7 @@ export async function fetchSalesInRange(
       .order('created_at', { ascending: false }),
     supabase
       .from('card_distributor_sales')
-      .select('id, total_amount, distributor_name, created_at, sold_by')
+      .select('id, total_amount, distributor_name, payment_method, created_at, sold_by')
       .eq('tenant_id', tenantId)
       .eq('is_deleted', false)
       .gte('created_at', rangeStart)
@@ -191,6 +191,7 @@ export async function fetchSalesInRange(
       amount: Number(d.total_amount ?? 0),
       created_at: d.created_at,
       performerId: (d as { sold_by?: string | null }).sold_by ?? null,
+      paymentMethod: (d as { payment_method?: string | null }).payment_method ?? null,
     })
   }
 
