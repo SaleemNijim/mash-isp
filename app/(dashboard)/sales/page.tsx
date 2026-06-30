@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { CalendarDays, Pencil, Plus, RefreshCw, ShoppingCart } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
@@ -22,6 +24,7 @@ import { RetailCardSaleModal } from '@/components/sales/RetailCardSaleModal'
 import { SellToDistributorModal } from '@/components/card-sales/SellToDistributorModal'
 import { SubscriptionPickModal } from '@/components/sales/SubscriptionPickModal'
 import { EditRetailSaleModal, type RetailSaleEditTarget } from '@/components/sales/EditRetailSaleModal'
+import { DeleteConfirmModal } from '@/components/shared/DeleteConfirmModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -50,16 +53,22 @@ function kindBadge(kind: SaleRow['kind']) {
   return <Badge>تجديد</Badge>
 }
 
+function canEditSale(sale: SaleRow): boolean {
+  if (sale.kind === 'retail') return !!sale.retailEdit
+  if (sale.kind === 'distributor') return true
+  return !!sale.customerId
+}
+
 function SalesLogList({
   sales,
   isLoading,
   emptyMessage,
-  onEditRetail,
+  onEdit,
 }: {
   sales: SaleRow[]
   isLoading: boolean
   emptyMessage: string
-  onEditRetail?: (sale: SaleRow) => void
+  onEdit?: (sale: SaleRow) => void
 }) {
   if (isLoading) {
     return <p className="text-sm text-muted-foreground text-center py-10">جارٍ التحميل...</p>
@@ -87,12 +96,12 @@ function SalesLogList({
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {sale.kind === 'retail' && sale.retailEdit && onEditRetail && (
+            {onEdit && canEditSale(sale) && (
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => onEditRetail(sale)}
+                onClick={() => onEdit(sale)}
                 title="تعديل"
               >
                 <Pencil size={14} />
@@ -119,6 +128,7 @@ function SalesLogList({
 export default function SalesPage() {
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const router = useRouter()
   const { data: tenant } = useTenant()
   const role = usePermissions((s) => s.role)
   const userName = role === 'employee' ? 'كاشير' : 'مبيعات'
@@ -131,6 +141,7 @@ export default function SalesPage() {
   const [renewalOpen, setRenewalOpen] = useState(false)
   const [historyDate, setHistoryDate] = useState(yesterdayDateStr)
   const [editRetail, setEditRetail] = useState<RetailSaleEditTarget | null>(null)
+  const [voidDistributor, setVoidDistributor] = useState<{ id: string; label: string } | null>(null)
 
   const todayStart = todayStartISO()
   const todayEnd = dayEndISO(todayDateStr())
@@ -188,20 +199,46 @@ export default function SalesPage() {
     void queryClient.invalidateQueries({ queryKey: ['pending-inbox'] })
   }
 
-  function handleEditRetail(sale: SaleRow) {
-    if (!sale.retailEdit) return
-    setEditRetail({
-      id: sale.id,
-      label: sale.label,
-      quantity: sale.retailEdit.quantity,
-      unitPrice: sale.retailEdit.unitPrice,
-      method: sale.retailEdit.method,
-      notes: sale.retailEdit.notes,
-      customerId: sale.retailEdit.customerId,
-      contactLabel: sale.retailEdit.contactLabel,
-      contactPhone: sale.retailEdit.contactPhone,
-      dueAt: sale.retailEdit.dueAt,
+  function handleEdit(sale: SaleRow) {
+    if (sale.kind === 'retail') {
+      if (!sale.retailEdit) return
+      setEditRetail({
+        id: sale.id,
+        label: sale.label,
+        quantity: sale.retailEdit.quantity,
+        unitPrice: sale.retailEdit.unitPrice,
+        method: sale.retailEdit.method,
+        notes: sale.retailEdit.notes,
+        customerId: sale.retailEdit.customerId,
+        contactLabel: sale.retailEdit.contactLabel,
+        contactPhone: sale.retailEdit.contactPhone,
+        dueAt: sale.retailEdit.dueAt,
+      })
+      return
+    }
+
+    if (sale.kind === 'distributor') {
+      setVoidDistributor({ id: sale.id, label: sale.label })
+      return
+    }
+
+    // اشتراك جديد / تجديد — التعديل عبر صفحة اشتراك المشترك
+    if (sale.customerId) {
+      router.push(`/subscriptions/customer/${sale.customerId}`)
+    } else {
+      toast.error('تعذّر فتح سجل المشترك لهذا الاشتراك')
+    }
+  }
+
+  async function handleVoidDistributor() {
+    if (!voidDistributor) return
+    const { error } = await supabase.rpc('void_distributor_sale', {
+      p_sale_id: voidDistributor.id,
+      p_nonce: crypto.randomUUID(),
     })
+    if (error) throw error
+    toast.success('تم إلغاء بيع الموزع')
+    handleSuccess()
   }
 
   function handleRefresh() {
@@ -254,7 +291,7 @@ export default function SalesPage() {
             sales={todaySales}
             isLoading={isLoading}
             emptyMessage="لا توجد عمليات اليوم — اضغط «إضافة عملية بيع»"
-            onEditRetail={handleEditRetail}
+            onEdit={handleEdit}
           />
         </DataPanel>
       </div>
@@ -293,7 +330,7 @@ export default function SalesPage() {
             sales={historySales}
             isLoading={historyLoading}
             emptyMessage="لا توجد عمليات بيع في هذا اليوم"
-            onEditRetail={handleEditRetail}
+            onEdit={handleEdit}
           />
         </DataPanel>
       </div>
@@ -330,6 +367,17 @@ export default function SalesPage() {
         sale={editRetail}
         onClose={() => setEditRetail(null)}
         onSuccess={handleSuccess}
+      />
+
+      <DeleteConfirmModal
+        open={voidDistributor !== null}
+        onClose={() => setVoidDistributor(null)}
+        onConfirm={handleVoidDistributor}
+        recordName={voidDistributor?.label ?? 'بيع الموزع'}
+        title="تأكيد إلغاء بيع الموزع"
+        confirmKeyword="إلغاء"
+        confirmLabel="تأكيد الإلغاء"
+        consequences="سيُسترجَع المخزون ويُعكَس رصيد الموزع أو الحساب البنكي. لتصحيح البيع أعد تسجيله من «إضافة عملية بيع». لا يمكن التراجع."
       />
     </div>
   )

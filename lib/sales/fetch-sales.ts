@@ -12,6 +12,8 @@ export interface SaleRow {
   performerId?: string | null
   paymentMethod?: string | null
   debtorName?: string | null
+  /** معرّف الزبون — للاشتراكات، يُستخدم للانتقال لصفحة تعديل الاشتراك */
+  customerId?: string | null
   /** بيانات التعديل — بيع تجزئة فقط */
   retailEdit?: {
     quantity: number
@@ -121,7 +123,7 @@ export async function fetchSalesInRange(
     supabase
       .from('subscription_periods')
       .select(
-        'id, subscription_id, amount_due, cash_amount, app_amount, discount_amount, created_at, recorded_by, customers(name)',
+        'id, subscription_id, customer_id, amount_due, cash_amount, app_amount, discount_amount, created_at, recorded_by, customers(name)',
       )
       .eq('tenant_id', tenantId)
       .eq('is_deleted', false)
@@ -204,6 +206,7 @@ export async function fetchSalesInRange(
       amount: collected,
       created_at: period.created_at,
       performerId: (period as { recorded_by?: string | null }).recorded_by ?? null,
+      customerId: (period.customer_id as string | null) ?? null,
     })
   }
 
