@@ -46,7 +46,6 @@ type RenewalQueryRow = {
   balance_remaining: number | null
   notes: string | null
   customers?: { name?: string | null; phone?: string | null } | { name?: string | null; phone?: string | null }[] | null
-  internet_credentials?: { password?: string | null } | { password?: string | null }[] | null
 }
 
 interface SyncResult {
@@ -194,7 +193,7 @@ async function syncMonthlyRenewals(options: {
   const { data, error } = await options.admin
     .from('subscription_periods')
     .select(
-      'period_start,paid_at,username,speed,mac_address,billing_label,amount_due,cash_amount,app_amount,discount_amount,balance_remaining,notes,customers(name,phone),internet_credentials(password)',
+      'period_start,paid_at,username,speed,mac_address,billing_label,amount_due,cash_amount,app_amount,discount_amount,balance_remaining,notes,customers(name,phone)',
     )
     .eq('tenant_id', options.tenantId)
     .eq('is_deleted', false)
@@ -208,14 +207,13 @@ async function syncMonthlyRenewals(options: {
     if (!periodStart) continue
 
     const customer = normalizeJoin<{ name?: string | null; phone?: string | null }>(row.customers)
-    const credential = normalizeJoin<{ password?: string | null }>(row.internet_credentials)
     const key = monthKey(periodStart)
     const rows = grouped.get(key) ?? []
     rows.push({
       customer_name: customer?.name ?? null,
       customer_phone: customer?.phone ?? null,
       username: row.username ?? null,
-      password: credential?.password ?? null,
+      password: null,
       speed: row.speed ?? null,
       mac_address: row.mac_address ?? null,
       billing_label: row.billing_label ?? null,
