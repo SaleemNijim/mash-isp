@@ -57,6 +57,25 @@ function sanitizeFileName(name: string): string {
   return name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'export'
 }
 
+export function normalizeFileIds(raw: unknown): Record<string, string> {
+  if (!raw) return {}
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, string>
+      }
+    } catch {
+      return {}
+    }
+    return {}
+  }
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return { ...(raw as Record<string, string>) }
+  }
+  return {}
+}
+
 function monthKey(date: string): string {
   return date.slice(0, 7)
 }
@@ -73,6 +92,31 @@ async function updateSyncRecord(
 ): Promise<void> {
   const { error } = await admin.from('tenant_drive_sync').update(values).eq('tenant_id', tenantId)
   if (error) throw new Error(error.message)
+}
+
+async function persistSyncProgress(
+  admin: SupabaseClient,
+  tenantId: string,
+  options: {
+    folderId: string
+    folderName: string
+    fileIds: Record<string, string>
+    completed?: boolean
+  },
+): Promise<void> {
+  await updateSyncRecord(admin, tenantId, {
+    drive_folder_id: options.folderId,
+    drive_folder_name: options.folderName,
+    file_ids: options.fileIds,
+    last_sync_at: new Date().toISOString(),
+    ...(options.completed
+      ? {
+          last_success_at: new Date().toISOString(),
+          last_error_at: null,
+          last_error_message: null,
+        }
+      : {}),
+  })
 }
 
 async function getTenantName(admin: SupabaseClient, tenantId: string): Promise<string> {
@@ -268,7 +312,7 @@ export async function syncTenantDrive(admin: SupabaseClient, record: DriveSyncRe
     await updateSyncRecord(admin, record.tenant_id, refreshed)
   }
 
-  const fileIds = { ...(record.file_ids ?? {}) }
+  const fileIds = normalizeFileIds(record.file_ids)
   const folderName = record.drive_folder_name || `MASH ISP — ${tenantName}`
   const folderId =
     record.drive_folder_id ??
@@ -276,6 +320,12 @@ export async function syncTenantDrive(admin: SupabaseClient, record: DriveSyncRe
       accessToken,
       name: folderName,
     }))
+
+  const progress = {
+    folderId,
+    folderName,
+    fileIds,
+  }
 
   let filesUploaded = 0
   filesUploaded += await syncDistributors({
@@ -285,6 +335,8 @@ export async function syncTenantDrive(admin: SupabaseClient, record: DriveSyncRe
     folderId,
     fileIds,
   })
+  await persistSyncProgress(admin, record.tenant_id, progress)
+
   filesUploaded += await syncRouters({
     admin,
     accessToken,
@@ -292,6 +344,8 @@ export async function syncTenantDrive(admin: SupabaseClient, record: DriveSyncRe
     rootFolderId: folderId,
     fileIds,
   })
+  await persistSyncProgress(admin, record.tenant_id, progress)
+
   filesUploaded += await syncMonthlyRenewals({
     admin,
     accessToken,
@@ -300,16 +354,7 @@ export async function syncTenantDrive(admin: SupabaseClient, record: DriveSyncRe
     folderId,
     fileIds,
   })
-
-  await updateSyncRecord(admin, record.tenant_id, {
-    drive_folder_id: folderId,
-    drive_folder_name: folderName,
-    file_ids: fileIds,
-    last_sync_at: new Date().toISOString(),
-    last_success_at: new Date().toISOString(),
-    last_error_at: null,
-    last_error_message: null,
-  })
+  await persistSyncProgress(admin, record.tenant_id, { ...progress, completed: true })
 
   return { tenantId: record.tenant_id, filesUploaded }
 }

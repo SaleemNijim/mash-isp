@@ -70,13 +70,55 @@ export async function ensureDriveFolder(options: {
   return created.id
 }
 
-export async function uploadExcelFile(options: {
+export async function findExcelFileInFolder(options: {
   accessToken: string
-  fileId?: string | null
+  folderId: string
+  fileName: string
+}): Promise<string | null> {
+  const ids = await findExcelFileIdsInFolder(options)
+  return ids[0] ?? null
+}
+
+export async function findExcelFileIdsInFolder(options: {
+  accessToken: string
+  folderId: string
+  fileName: string
+}): Promise<string[]> {
+  const { accessToken, folderId, fileName } = options
+  const params = new URLSearchParams({
+    q: `name = '${escapeDriveQuery(fileName)}' and '${escapeDriveQuery(folderId)}' in parents and mimeType = '${EXCEL_MIME}' and trashed = false`,
+    fields: 'files(id,name)',
+    spaces: 'drive',
+    pageSize: '20',
+  })
+
+  const existing = await parseDriveResponse<{ files?: { id: string }[] }>(
+    await fetch(`${DRIVE_API}/files?${params.toString()}`, {
+      headers: driveHeaders(accessToken),
+    }),
+  )
+
+  return (existing.files ?? []).map((file) => file.id)
+}
+
+async function deleteDuplicateExcelFiles(options: {
+  accessToken: string
+  fileIds: string[]
+  keepId: string
+}): Promise<void> {
+  for (const fileId of options.fileIds) {
+    if (fileId === options.keepId) continue
+    await deleteDriveFile({ accessToken: options.accessToken, fileId })
+  }
+}
+
+async function uploadExcelMultipart(options: {
+  accessToken: string
+  fileId: string | null
   folderId: string
   fileName: string
   buffer: Buffer
-}): Promise<string> {
+}): Promise<{ id: string; status: number }> {
   const { accessToken, fileId, folderId, fileName, buffer } = options
   const metadata = {
     name: fileName,
@@ -100,18 +142,87 @@ export async function uploadExcelFile(options: {
     ? `${DRIVE_UPLOAD_API}/files/${fileId}?uploadType=multipart&fields=id`
     : `${DRIVE_UPLOAD_API}/files?uploadType=multipart&fields=id`
 
-  const uploaded = await parseDriveResponse<{ id: string }>(
-    await fetch(url, {
-      method: fileId ? 'PATCH' : 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': `multipart/related; boundary=${boundary}`,
-      },
-      body,
-    }),
-  )
+  const response = await fetch(url, {
+    method: fileId ? 'PATCH' : 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': `multipart/related; boundary=${boundary}`,
+    },
+    body,
+  })
 
-  return uploaded.id
+  const data = await response.json().catch(() => null)
+  if (!response.ok) {
+    const message =
+      typeof data?.error?.message === 'string'
+        ? data.error.message
+        : typeof data?.error === 'string'
+          ? data.error
+          : 'Google Drive request failed'
+    const error = new Error(message) as Error & { status?: number }
+    error.status = response.status
+    throw error
+  }
+
+  return { id: (data as { id: string }).id, status: response.status }
+}
+
+export async function uploadExcelFile(options: {
+  accessToken: string
+  fileId?: string | null
+  folderId: string
+  fileName: string
+  buffer: Buffer
+}): Promise<string> {
+  const { accessToken, folderId, fileName, buffer } = options
+  let targetFileId = options.fileId ?? null
+  let duplicateIds: string[] = []
+
+  if (!targetFileId) {
+    duplicateIds = await findExcelFileIdsInFolder({ accessToken, folderId, fileName })
+    targetFileId = duplicateIds[0] ?? null
+  }
+
+  try {
+    const uploaded = await uploadExcelMultipart({
+      accessToken,
+      fileId: targetFileId,
+      folderId,
+      fileName,
+      buffer,
+    })
+    if (duplicateIds.length > 1) {
+      await deleteDuplicateExcelFiles({
+        accessToken,
+        fileIds: duplicateIds,
+        keepId: uploaded.id,
+      })
+    }
+    return uploaded.id
+  } catch (error) {
+    const status = (error as Error & { status?: number }).status
+    if (targetFileId && status === 404) {
+      duplicateIds = await findExcelFileIdsInFolder({ accessToken, folderId, fileName })
+      const retryFileId = duplicateIds[0] ?? null
+      const uploaded = await uploadExcelMultipart({
+        accessToken,
+        fileId: retryFileId,
+        folderId,
+        fileName,
+        buffer,
+      })
+      if (duplicateIds.length > 1) {
+        await deleteDuplicateExcelFiles({
+          accessToken,
+          fileIds: duplicateIds,
+          keepId: uploaded.id,
+        })
+      }
+      return uploaded.id
+    }
+
+    throw error
+  }
 }
 
 export async function deleteDriveFile(options: {
