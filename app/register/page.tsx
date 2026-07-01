@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast, Toaster } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { mapAuthErrorMessage } from '@/lib/auth/auth-errors'
+import {
+  authNetworkErrorMessage,
+  isAuthNetworkError,
+  missingSupabaseEnvMessage,
+} from '@/lib/auth/network-error'
 import { resolvePostLoginPath } from '@/lib/auth-redirect'
 import { fetchOrCompleteUserProfile } from '@/lib/auth/complete-user-setup'
 import { uploadTenantLogo, saveTenantProfile } from '@/lib/tenant/profile'
@@ -53,28 +59,45 @@ export default function RegisterPage() {
     }
 
     setLoading(true)
-    const supabase = createClient()
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          company_name: companyName,
-          admin_name: companyName,
-          phone: trimmedPhone,
+    let supabase
+    try {
+      supabase = createClient()
+    } catch (err) {
+      toast.error(missingSupabaseEnvMessage())
+      console.error(err)
+      setLoading(false)
+      return
+    }
+
+    let data
+    let signUpError
+    try {
+      ;({ data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            company_name: companyName,
+            admin_name: companyName,
+            phone: trimmedPhone,
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
+      }))
+    } catch (err) {
+      toast.error(isAuthNetworkError(err) ? authNetworkErrorMessage() : 'فشل إنشاء الحساب')
+      console.error(err)
+      setLoading(false)
+      return
+    }
 
     if (signUpError) {
-      const msg =
-        signUpError.message.includes('already registered') ||
-        signUpError.message.includes('already been registered')
-          ? 'البريد الإلكتروني مستخدم مسبقاً، جرّب تسجيل الدخول'
-          : signUpError.message
-      toast.error(msg)
+      toast.error(
+        isAuthNetworkError(signUpError)
+          ? authNetworkErrorMessage()
+          : mapAuthErrorMessage(signUpError.message),
+      )
       setLoading(false)
       return
     }
