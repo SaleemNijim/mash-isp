@@ -136,20 +136,6 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="phone">رقم الهاتف</Label>
-            <Input
-              id="phone"
-              type="tel"
-              placeholder="مثال: 0599123456"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-              dir="ltr"
-              className="text-right"
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="email">البريد الإلكتروني</Label>
             <Input
               id="email"
