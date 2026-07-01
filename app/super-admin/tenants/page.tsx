@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -29,6 +30,7 @@ import {
 interface TenantRow {
   id: string
   name: string
+  phone: string | null
   is_active: boolean
   is_trial: boolean
   trial_ends_at: string | null
@@ -148,7 +150,7 @@ export default function SuperAdminTenantsPage() {
       const { data, error } = await supabase
         .from('tenants')
         .select(
-          'id,name,is_active,is_trial,trial_ends_at,subscription_end,billing_cycle,plan_id',
+          'id,name,phone,is_active,is_trial,trial_ends_at,subscription_end,billing_cycle,plan_id',
         )
         .order('name')
       if (error) throw error
@@ -300,6 +302,7 @@ export default function SuperAdminTenantsPage() {
           <TableHeader>
             <TableRow>
               <TableHead className="text-right">الشركة</TableHead>
+              <TableHead className="text-right">الجوال</TableHead>
               <TableHead className="text-right">الحالة</TableHead>
               <TableHead className="text-right">انتهاء التجربة</TableHead>
               <TableHead className="text-right">انتهاء الاشتراك</TableHead>
@@ -310,14 +313,14 @@ export default function SuperAdminTenantsPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   جاري التحميل...
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && tenants.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   لا توجد شركات
                 </TableCell>
               </TableRow>
@@ -327,7 +330,17 @@ export default function SuperAdminTenantsPage() {
               const showActivate = shouldShowActivateSubscription(tenant)
               return (
                 <TableRow key={tenant.id}>
-                  <TableCell className="font-medium">{tenant.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      href={`/super-admin/tenants/${tenant.id}`}
+                      className="text-primary-800 hover:underline"
+                    >
+                      {tenant.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell dir="ltr" className="text-right tabular-nums">
+                    {tenant.phone ?? '—'}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[status]}>
                       {STATUS_LABELS[status]}

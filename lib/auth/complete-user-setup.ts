@@ -53,14 +53,17 @@ export async function fetchOrCompleteUserProfile(
     (typeof meta.admin_name === 'string' ? meta.admin_name.trim() : '') ||
     companyName ||
     (typeof meta.name === 'string' ? meta.name.trim() : '')
+  const companyPhone =
+    typeof meta.phone === 'string' ? meta.phone.trim() : ''
 
-  if (!companyName || !adminName) {
+  if (!companyName || !adminName || !companyPhone) {
     return { profile: null, setupError: 'missing_metadata' }
   }
 
   const { error: rpcError } = await supabase.rpc('create_tenant_with_trial', {
     p_company_name: companyName,
     p_admin_name: adminName,
+    p_phone: companyPhone,
   })
 
   if (rpcError) {

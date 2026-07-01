@@ -32,6 +32,7 @@ async function uploadLogoIfProvided(
 export default function RegisterPage() {
   const router = useRouter()
   const [companyName, setCompanyName] = useState('')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -45,6 +46,12 @@ export default function RegisterPage() {
       return
     }
 
+    const trimmedPhone = phone.trim()
+    if (!trimmedPhone) {
+      toast.error('رقم الجوال مطلوب')
+      return
+    }
+
     setLoading(true)
     const supabase = createClient()
 
@@ -55,6 +62,7 @@ export default function RegisterPage() {
         data: {
           company_name: companyName,
           admin_name: companyName,
+          phone: trimmedPhone,
         },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
@@ -110,6 +118,34 @@ export default function RegisterPage() {
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
               required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="phone">رقم الجوال</Label>
+            <Input
+              id="phone"
+              type="tel"
+              placeholder="05xxxxxxxx"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              required
+              dir="ltr"
+              className="text-right"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="phone">رقم الهاتف</Label>
+            <Input
+              id="phone"
+              type="tel"
+              placeholder="مثال: 0599123456"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              required
+              dir="ltr"
+              className="text-right"
             />
           </div>
 

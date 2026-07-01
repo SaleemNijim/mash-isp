@@ -31,6 +31,7 @@ describeIfSupabase('registration flow (§2.1 / §8.2 PR6)', () => {
     const { data, error } = await supabase.rpc('create_tenant_with_trial', {
       p_company_name: '__test_skip__',
       p_admin_name: '__test_skip__',
+      p_phone: '__test_skip__',
     })
 
     // Without auth context the RPC should fail — proves function exists
@@ -51,5 +52,7 @@ describe('registration page contract (static)', () => {
     expect(source).toContain('/verify-email')
     expect(source).toContain('emailRedirectTo')
     expect(source).toContain('/auth/callback')
+    expect(source).toContain('phone')
+    expect(source).toContain('required')
   })
 })
