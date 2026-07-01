@@ -69,6 +69,8 @@ function styleHeader(row: ExcelJS.Row): void {
 }
 
 export function getMonthlyRenewalsFileName(month: string): string {
+  const [year, mon] = month.split('-')
+  if (year && mon) return `سجل_التجديد_${mon}-${year}.xlsx`
   return `سجل_التجديد_${month}.xlsx`
 }
 
