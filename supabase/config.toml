@@ -243,9 +243,9 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# قوالب البريد — رمز OTP (6 أرقام) بدلاً من الرابط فقط
+# قوالب البريد — رابط تأكيد (ConfirmationURL) وليس رمز OTP
 [auth.email.template.confirmation]
-subject = "رمز تأكيد حساب MASH ISP"
+subject = "تأكيد حساب MASH ISP — اضغط الرابط"
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.recovery]

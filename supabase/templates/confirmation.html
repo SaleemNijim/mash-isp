@@ -1,10 +1,19 @@
 <h2 style="font-family: sans-serif; color: #0D1F1A;">تأكيد حساب MASH ISP</h2>
 <p style="font-family: sans-serif; color: #4A6B60;">
-  استخدم الرمز التالي لتأكيد بريدك الإلكتروني وإكمال إنشاء حساب الشركة:
+  اضغط على الزر أدناه لتأكيد بريدك الإلكتروني وإكمال إنشاء حساب الشركة:
 </p>
-<p style="font-family: monospace; font-size: 28px; font-weight: bold; letter-spacing: 6px; color: #0F6E56;">
-  {{ .Token }}
+<p style="text-align: center; margin: 28px 0;">
+  <a
+    href="{{ .ConfirmationURL }}"
+    style="display: inline-block; padding: 14px 28px; background-color: #0F6E56; color: #ffffff; text-decoration: none; border-radius: 8px; font-family: sans-serif; font-weight: bold;"
+  >
+    تأكيد البريد والدخول
+  </a>
 </p>
 <p style="font-family: sans-serif; color: #6B8A7F; font-size: 13px;">
-  الرمز صالح لمدة محدودة. إذا لم تطلب هذا الرمز، تجاهل الرسالة.
+  إذا لم يعمل الزر، انسخ الرابط التالي والصقه في المتصفح:<br />
+  <a href="{{ .ConfirmationURL }}" style="color: #0F6E56; word-break: break-all;">{{ .ConfirmationURL }}</a>
+</p>
+<p style="font-family: sans-serif; color: #6B8A7F; font-size: 13px;">
+  الرابط صالح لمدة محدودة. إذا لم تطلب إنشاء حساب، تجاهل هذه الرسالة.
 </p>

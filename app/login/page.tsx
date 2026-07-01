@@ -55,7 +55,7 @@ export default function LoginPage() {
           toast.error(authNetworkErrorMessage())
         } else if (error.message === 'Email not confirmed') {
           sessionStorage.setItem('mash_pending_verify_email', email.trim())
-          toast.error('يجب تأكيد البريد أولاً — أدخل رمز التأكيد')
+          toast.error('يجب تأكيد البريد أولاً — تحقق من رابط التأكيد في بريدك')
           router.push(`/verify-email?email=${encodeURIComponent(email.trim())}`)
         } else {
           toast.error(mapAuthErrorMessage(error.message))
