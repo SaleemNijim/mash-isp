@@ -188,7 +188,7 @@ export default function SuperAdminTenantDetailPage() {
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false })
       if (error) throw error
-      return (data ?? []) as TenantInvoice[]
+      return (data ?? []) as unknown as TenantInvoice[]
     },
   })
 
