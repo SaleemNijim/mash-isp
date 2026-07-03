@@ -1,15 +1,17 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Pencil, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowLeftRight, ArrowRight, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { useDeleteConfirm } from '@/hooks/useDeleteConfirm'
+import { usePermissions } from '@/hooks/usePermissions'
 import { PermissionGuard } from '@/components/permissions/PermissionGuard'
 import { DeleteConfirmModal } from '@/components/shared/DeleteConfirmModal'
+import { CredentialCorrectionDialog } from '@/components/subscriptions/CredentialCorrectionDialog'
 import { SubscriptionPeriodEditForm } from '@/components/subscriptions/SubscriptionPeriodEditForm'
 import { type SubscriptionPeriodRow } from '@/lib/subscriptions/types'
 import { formatMoney } from '@/lib/format-money'
@@ -50,6 +52,9 @@ export default function CustomerSubscriptionHistoryPage() {
   const supabase = createClient()
   const customerId = params.customerId as string
   const editId = searchParams.get('edit')
+  const role = usePermissions((s) => s.role)
+  const isAdmin = role === 'admin' || role === 'super_admin'
+  const [correctionOpen, setCorrectionOpen] = useState(false)
 
   const { open: deleteOpen, target, openModal, closeModal } = useDeleteConfirm()
 
@@ -108,6 +113,8 @@ export default function CustomerSubscriptionHistoryPage() {
   const invalidate = () => {
     void refetch()
     void queryClient.invalidateQueries({ queryKey: ['subscription-periods'] })
+    void queryClient.invalidateQueries({ queryKey: ['customer-credential-current'] })
+    void queryClient.invalidateQueries({ queryKey: ['customer-active-subscription'] })
     void queryClient.invalidateQueries({ queryKey: ['known-mac-addresses'] })
     void queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
     void queryClient.invalidateQueries({ queryKey: ['debts'] })
@@ -144,6 +151,17 @@ export default function CustomerSubscriptionHistoryPage() {
         description={customer?.phone ? `رقم التواصل: ${customer.phone}` : undefined}
         actions={
           <div className="flex flex-wrap gap-2">
+            {isAdmin && activeSubscription?.type === 'bb' && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => setCorrectionOpen(true)}
+              >
+                <ArrowLeftRight size={14} />
+                تصحيح يوزر/باقة
+              </Button>
+            )}
             {activeSubscription && (
               <PermissionGuard permission="renew_subscriptions">
                 <Button size="sm" className="gap-1.5" asChild>
@@ -310,6 +328,16 @@ export default function CustomerSubscriptionHistoryPage() {
         recordName={target?.name ?? ''}
         consequences={target?.consequences}
       />
+
+      {customer && (
+        <CredentialCorrectionDialog
+          open={correctionOpen}
+          onOpenChange={setCorrectionOpen}
+          customerId={customerId}
+          customerName={customer.name}
+          onSuccess={invalidate}
+        />
+      )}
     </div>
   )
 }
