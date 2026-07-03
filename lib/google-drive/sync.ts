@@ -9,6 +9,11 @@ import {
   getMonthlyRenewalsFileName,
   type MonthlyRenewalExportRow,
 } from '@/lib/excel/monthly-renewals-export'
+import {
+  buildMonthlySalesWorkbookBuffer,
+  getMonthlySalesFileName,
+} from '@/lib/excel/monthly-sales-export'
+import { fetchCardSalesGroupedByMonth } from '@/lib/sales/fetch-card-sales-by-month'
 import { deleteDriveFile, ensureDriveFolder, uploadExcelFile } from '@/lib/google-drive/drive-api'
 import { getValidAccessToken, type DriveSyncTokens } from '@/lib/google-drive/client'
 
@@ -226,14 +231,98 @@ async function syncRouters(options: {
   return count
 }
 
+async function migrateRootFilesToSubfolder(options: {
+  accessToken: string
+  fileIds: Record<string, string>
+  keyPrefix: string
+  migrationFlag: string
+}): Promise<void> {
+  if (options.fileIds[options.migrationFlag]) return
+
+  for (const [key, fileId] of Object.entries(options.fileIds)) {
+    if (key.startsWith(options.keyPrefix)) {
+      try {
+        await deleteDriveFile({ accessToken: options.accessToken, fileId })
+      } catch {
+        /* قد يكون الملف محذوفاً مسبقاً */
+      }
+      delete options.fileIds[key]
+    }
+  }
+
+  options.fileIds[options.migrationFlag] = '1'
+}
+
+async function syncMonthlyCardSales(options: {
+  admin: SupabaseClient
+  accessToken: string
+  tenantId: string
+  tenantName: string
+  rootFolderId: string
+  fileIds: Record<string, string>
+}): Promise<number> {
+  const salesFolderId = await ensureDriveFolder({
+    accessToken: options.accessToken,
+    name: 'سجل المبيعات',
+    parentId: options.rootFolderId,
+  })
+  options.fileIds['folder:sales'] = salesFolderId
+
+  const grouped = await fetchCardSalesGroupedByMonth(options.admin, options.tenantId)
+
+  let count = 0
+  const currentKeys = new Set<string>()
+  for (const [month, rows] of grouped) {
+    const key = `sales:${month}`
+    currentKeys.add(key)
+    const buffer = await buildMonthlySalesWorkbookBuffer({
+      companyName: options.tenantName,
+      month,
+      rows,
+    })
+    const id = await uploadExcelFile({
+      accessToken: options.accessToken,
+      folderId: salesFolderId,
+      fileId: options.fileIds[key],
+      fileName: getMonthlySalesFileName(month),
+      buffer,
+    })
+    options.fileIds[key] = id
+    count += 1
+  }
+
+  for (const [key, fileId] of Object.entries(options.fileIds)) {
+    if (key.startsWith('sales:') && !currentKeys.has(key)) {
+      await deleteDriveFile({ accessToken: options.accessToken, fileId })
+      delete options.fileIds[key]
+    }
+  }
+
+  return count
+}
+
 async function syncMonthlyRenewals(options: {
   admin: SupabaseClient
   accessToken: string
   tenantId: string
   tenantName: string
-  folderId: string
+  rootFolderId: string
   fileIds: Record<string, string>
 }): Promise<number> {
+  const renewalsFolderId = await ensureDriveFolder({
+    accessToken: options.accessToken,
+    name: 'سجلات التجديد',
+    parentId: options.rootFolderId,
+  })
+  options.fileIds['folder:renewals'] = renewalsFolderId
+
+  await migrateRootFilesToSubfolder({
+    accessToken: options.accessToken,
+    fileIds: options.fileIds,
+    keyPrefix: 'renewals:',
+    migrationFlag: '_renewals_subfolder_migrated',
+  })
+
   const { data, error } = await options.admin
     .from('subscription_periods')
     .select(
@@ -285,7 +374,7 @@ async function syncMonthlyRenewals(options: {
     })
     const id = await uploadExcelFile({
       accessToken: options.accessToken,
-      folderId: options.folderId,
+      folderId: renewalsFolderId,
       fileId: options.fileIds[key],
       fileName: getMonthlyRenewalsFileName(month),
       buffer,
@@ -346,12 +435,22 @@ export async function syncTenantDrive(admin: SupabaseClient, record: DriveSyncRe
   })
   await persistSyncProgress(admin, record.tenant_id, progress)
 
+  filesUploaded += await syncMonthlyCardSales({
+    admin,
+    accessToken,
+    tenantId: record.tenant_id,
+    tenantName,
+    rootFolderId: folderId,
+    fileIds,
+  })
+  await persistSyncProgress(admin, record.tenant_id, progress)
+
   filesUploaded += await syncMonthlyRenewals({
     admin,
     accessToken,
     tenantId: record.tenant_id,
     tenantName,
-    folderId,
+    rootFolderId: folderId,
     fileIds,
   })
   await persistSyncProgress(admin, record.tenant_id, { ...progress, completed: true })

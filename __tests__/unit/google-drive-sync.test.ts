@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { findExcelFileInFolder, uploadExcelFile } from '@/lib/google-drive/drive-api'
 import { normalizeFileIds } from '@/lib/google-drive/sync'
 import { getMonthlyRenewalsFileName } from '@/lib/excel/monthly-renewals-export'
+import { getMonthlySalesFileName, summarizeMonthlySales } from '@/lib/excel/monthly-sales-export'
 
 describe('normalizeFileIds', () => {
   it('يعيد كائناً فارغاً عند null أو undefined', () => {
@@ -24,6 +25,49 @@ describe('getMonthlyRenewalsFileName', () => {
   it('ينتج ملفاً منفصلاً لكل شهر', () => {
     expect(getMonthlyRenewalsFileName('2026-07')).toBe('سجل_التجديد_07-2026.xlsx')
     expect(getMonthlyRenewalsFileName('2026-08')).toBe('سجل_التجديد_08-2026.xlsx')
+  })
+})
+
+describe('getMonthlySalesFileName', () => {
+  it('ينتج ملف مبيعات منفصلاً لكل شهر', () => {
+    expect(getMonthlySalesFileName('2026-07')).toBe('سجل_المبيعات_07-2026.xlsx')
+    expect(getMonthlySalesFileName('2026-12')).toBe('سجل_المبيعات_12-2026.xlsx')
+  })
+})
+
+describe('summarizeMonthlySales', () => {
+  it('يجمع تجزئة وموزعين', () => {
+    const summary = summarizeMonthlySales([
+      {
+        created_at: '2026-07-01T10:00:00Z',
+        kind: 'retail',
+        description: 'بطاقة',
+        quantity: 2,
+        unit_price: 10,
+        discount_percent: null,
+        total_amount: 20,
+        payment_method: 'نقدي',
+        debtor_name: null,
+        notes: null,
+      },
+      {
+        created_at: '2026-07-02T11:00:00Z',
+        kind: 'distributor',
+        description: 'موزع: أحمد',
+        quantity: null,
+        unit_price: null,
+        discount_percent: null,
+        total_amount: 50,
+        payment_method: 'نقدي',
+        debtor_name: null,
+        notes: null,
+      },
+    ])
+    expect(summary.retailTotal).toBe(20)
+    expect(summary.distributorTotal).toBe(50)
+    expect(summary.grandTotal).toBe(70)
+    expect(summary.retailCount).toBe(1)
+    expect(summary.distributorCount).toBe(1)
   })
 })
 
