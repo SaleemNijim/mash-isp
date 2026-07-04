@@ -98,9 +98,9 @@ export function SubscriptionPeriodEditForm({
 
   return (
     <DataPanel>
-      <div className="p-6 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">تعديل سجل اشتراك</h2>
+      <div className="p-4 sm:p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base sm:text-lg font-semibold">تعديل سجل اشتراك</h2>
           <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
             إغلاق
           </Button>
@@ -133,11 +133,11 @@ export function SubscriptionPeriodEditForm({
           <Input value={form.notes} onChange={(e) => set('notes', e.target.value)} disabled={saving} />
         </div>
 
-        <div className="flex gap-2">
-          <Button onClick={() => void handleSave()} disabled={saving}>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => void handleSave()} disabled={saving} className="min-h-10 flex-1 sm:flex-none">
             {saving ? 'جارٍ الحفظ…' : 'حفظ التعديلات'}
           </Button>
-          <Button variant="outline" onClick={onCancel} disabled={saving}>
+          <Button variant="outline" onClick={onCancel} disabled={saving} className="min-h-10 flex-1 sm:flex-none">
             إلغاء
           </Button>
         </div>

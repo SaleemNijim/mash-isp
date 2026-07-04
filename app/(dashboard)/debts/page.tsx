@@ -174,7 +174,7 @@ export default function DebtsPage() {
       </div>
 
       <Tabs defaultValue="customers">
-        <TabsList>
+        <TabsList className="w-full max-w-full overflow-x-auto flex-nowrap justify-start">
           <TabsTrigger value="customers">مشتركون ({customerDebts.length})</TabsTrigger>
           <TabsTrigger value="distributors">موزعون ({distributorDebts.length})</TabsTrigger>
         </TabsList>

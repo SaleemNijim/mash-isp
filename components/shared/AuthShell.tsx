@@ -25,7 +25,7 @@ export function AuthShell({ children, maxWidth = 'sm' }: AuthShellProps) {
       <div
         className={`relative w-full ${maxWidth === 'md' ? 'max-w-lg' : 'max-w-[440px]'}`}
       >
-        <div className="overflow-hidden rounded-2xl border border-[#D1E8E2] bg-white p-8 shadow-[0_8px_32px_rgba(15,110,86,0.08)]">
+        <div className="overflow-hidden rounded-2xl border border-[#D1E8E2] bg-white p-5 sm:p-8 shadow-[0_8px_32px_rgba(15,110,86,0.08)]">
           {children}
         </div>
       </div>

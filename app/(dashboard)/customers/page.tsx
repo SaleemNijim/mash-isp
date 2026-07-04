@@ -66,6 +66,65 @@ interface HubRow extends CustomerRecord {
   debtTotal: number
 }
 
+function CustomerHubRowActions({
+  row,
+  onEdit,
+  onDelete,
+  compact,
+}: {
+  row: HubRow
+  onEdit: () => void
+  onDelete: () => void
+  compact?: boolean
+}) {
+  const btnClass = compact ? 'h-8 px-2.5 text-xs gap-1' : 'h-7 px-2 text-xs gap-1'
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Button variant="outline" size="sm" className={btnClass} asChild title="سجل الاشتراكات">
+        <Link href={`/subscriptions/customer/${row.id}`}>
+          <FileText size={12} />
+          سجل
+        </Link>
+      </Button>
+      {row.subscriptionId ? (
+        <PermissionGuard permission="renew_subscriptions">
+          <Button variant="default" size="sm" className={btnClass} asChild title="تجديد الاشتراك">
+            <Link href={`/subscriptions/renew/${row.subscriptionId}`}>
+              <RotateCcw size={12} />
+              تجديد
+            </Link>
+          </Button>
+        </PermissionGuard>
+      ) : (
+        <PermissionGuard permission="create_subscriptions">
+          <Button variant="outline" size="sm" className={btnClass} asChild title="اشتراك PPP جديد">
+            <Link href={`/subscriptions/new?customer=${row.id}`}>
+              <Wifi size={12} />
+              اشتراك
+            </Link>
+          </Button>
+        </PermissionGuard>
+      )}
+      <PermissionGuard permission="manage_customers">
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onEdit} title="تعديل بيانات المشترك">
+          <Pencil size={12} />
+        </Button>
+      </PermissionGuard>
+      <PermissionGuard permission="delete_records">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0 text-destructive"
+          onClick={onDelete}
+          title="حذف المشترك"
+        >
+          <Trash2 size={12} />
+        </Button>
+      </PermissionGuard>
+    </div>
+  )
+}
+
 function CustomersHubContent() {
   const supabase = createClient()
   const { data: tenant } = useTenant()
@@ -366,10 +425,99 @@ function CustomersHubContent() {
         />
       </div>
 
-      <DataPanel noPadding className="w-full">
+      <DataPanel noPadding className="w-full min-w-0">
+        {/* بطاقات — هاتف */}
+        <div className="md:hidden divide-y divide-border max-h-[calc(100dvh-18rem)] overflow-y-auto">
+          {isLoading && (
+            <p className="py-12 text-center text-sm text-muted-foreground">جارٍ التحميل...</p>
+          )}
+          {!isLoading && filtered.length === 0 && (
+            <p className="py-12 text-center text-sm text-muted-foreground px-4">
+              لا توجد نتائج — جرّب فلتراً آخر أو أضف مشتركاً
+            </p>
+          )}
+          {filtered.map((row) => {
+            const st = subscriptionStatusLabel(row.endDate)
+            return (
+              <article key={row.id} className="p-3 space-y-2.5">
+                <div className="flex items-start justify-between gap-2 min-w-0">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/subscriptions/customer/${row.id}`}
+                      className="font-medium text-sm hover:text-primary hover:underline break-words"
+                    >
+                      {row.name}
+                    </Link>
+                    {row.phone && (
+                      <p className="text-xs text-muted-foreground font-mono tabular-nums" dir="ltr">
+                        {row.phone}
+                      </p>
+                    )}
+                  </div>
+                  <Badge variant={st.variant} className="shrink-0">
+                    {st.label}
+                  </Badge>
+                </div>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  <div>
+                    <dt className="text-muted-foreground">السرعة</dt>
+                    <dd>{row.speed ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">السعر</dt>
+                    <dd className="tabular-nums">{row.price != null ? formatMoney(row.price) : '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">ينتهي</dt>
+                    <dd>{formatHubDate(row.endDate)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">الدين</dt>
+                    <dd className="tabular-nums">
+                      {row.debtTotal > 0 ? (
+                        <Link href="/debts" className="font-semibold text-destructive hover:underline">
+                          {formatMoney(row.debtTotal)}
+                        </Link>
+                      ) : (
+                        '—'
+                      )}
+                    </dd>
+                  </div>
+                  {row.address && (
+                    <div className="col-span-2">
+                      <dt className="text-muted-foreground">العنوان</dt>
+                      <dd className="break-words">{row.address}</dd>
+                    </div>
+                  )}
+                </dl>
+                <CustomerHubRowActions
+                  row={row}
+                  compact
+                  onEdit={() => {
+                    setEditTarget(row)
+                    setFormOpen(true)
+                  }}
+                  onDelete={() => setDeleteTarget({ id: row.id, name: row.name })}
+                />
+              </article>
+            )
+          })}
+          {isFetchingNextPage && (
+            <p className="py-3 text-center text-xs text-muted-foreground">جارٍ تحميل المزيد...</p>
+          )}
+          {hasNextPage && !isFetchingNextPage && (
+            <div className="p-3">
+              <Button variant="outline" size="sm" className="w-full min-h-10" onClick={() => void fetchNextPage()}>
+                تحميل المزيد
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* جدول — تابلت وسطح مكتب */}
         <div
           ref={containerRef}
-          className="overflow-auto w-full"
+          className="hidden md:block overflow-auto w-full min-w-0"
           style={{ height: 'calc(100vh - 300px)', minHeight: 400 }}
         >
           <table className="mash-data-table min-w-[960px]">
@@ -454,78 +602,14 @@ function CustomersHubContent() {
                       )}
                     </td>
                     <td className="col-actions col-c">
-                      <div className="flex items-center justify-center gap-1 flex-wrap">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs gap-1"
-                          asChild
-                          title="سجل الاشتراكات"
-                        >
-                          <Link href={`/subscriptions/customer/${row.id}`}>
-                            <FileText size={12} />
-                            سجل
-                          </Link>
-                        </Button>
-                        {row.subscriptionId ? (
-                          <PermissionGuard permission="renew_subscriptions">
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="h-7 px-2 text-xs gap-1"
-                              asChild
-                              title="تجديد الاشتراك"
-                            >
-                              <Link href={`/subscriptions/renew/${row.subscriptionId}`}>
-                                <RotateCcw size={12} />
-                                تجديد
-                              </Link>
-                            </Button>
-                          </PermissionGuard>
-                        ) : (
-                          <PermissionGuard permission="create_subscriptions">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 px-2 text-xs gap-1"
-                              asChild
-                              title="اشتراك PPP جديد"
-                            >
-                              <Link href={`/subscriptions/new?customer=${row.id}`}>
-                                <Wifi size={12} />
-                                اشتراك
-                              </Link>
-                            </Button>
-                          </PermissionGuard>
-                        )}
-                        <PermissionGuard permission="manage_customers">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() => {
-                              setEditTarget(row)
-                              setFormOpen(true)
-                            }}
-                            title="تعديل بيانات المشترك"
-                          >
-                            <Pencil size={12} />
-                          </Button>
-                        </PermissionGuard>
-                        <PermissionGuard permission="delete_records">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-destructive"
-                            onClick={() =>
-                              setDeleteTarget({ id: row.id, name: row.name })
-                            }
-                            title="حذف المشترك"
-                          >
-                            <Trash2 size={12} />
-                          </Button>
-                        </PermissionGuard>
-                      </div>
+                      <CustomerHubRowActions
+                        row={row}
+                        onEdit={() => {
+                          setEditTarget(row)
+                          setFormOpen(true)
+                        }}
+                        onDelete={() => setDeleteTarget({ id: row.id, name: row.name })}
+                      />
                     </td>
                   </tr>
                 )
@@ -600,7 +684,7 @@ function FilterGroup({
   onChange: (v: string) => void
 }) {
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
+    <div className="flex items-center gap-1.5 flex-wrap overflow-x-auto pb-1 max-w-full">
       <span className="text-xs text-muted-foreground ml-1 shrink-0">{label}:</span>
       {options.map(([val, text]) => (
         <Button

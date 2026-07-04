@@ -108,7 +108,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-mash-page" dir="rtl">
+    <div className="min-h-screen bg-mash-page overflow-x-hidden" dir="rtl">
       <IdleTimeout />
 
       {mobileOpen && (
@@ -227,8 +227,8 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className={`${mainMargin} flex flex-col min-h-screen transition-[margin] duration-200 ease-out`}>
-        <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-[#D1E8E2] bg-white/90 px-4 backdrop-blur-xl">
+      <div className={`${mainMargin} flex flex-col min-h-screen min-w-0 overflow-x-hidden transition-[margin] duration-200 ease-out`}>
+        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 sm:gap-3 border-b border-[#D1E8E2] bg-white/90 px-3 sm:px-4 backdrop-blur-xl min-w-0">
           <button
             onClick={() => setMobileOpen(true)}
             className="lg:hidden text-mash-text-muted hover:text-mash-text min-h-11 min-w-11 inline-flex items-center justify-center"
@@ -243,7 +243,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
         {!isCashier && <TrialBanner />}
 
-        <main className="flex-1 p-4 lg:p-6">{children}</main>
+        <main className="flex-1 min-w-0 p-3 sm:p-4 lg:p-6">{children}</main>
       </div>
 
       <Toaster richColors position="top-center" dir="rtl" />

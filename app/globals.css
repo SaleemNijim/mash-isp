@@ -171,7 +171,8 @@
   }
 
   .mash-table-scroll {
-    @apply overflow-auto;
+    @apply overflow-x-auto overflow-y-auto max-w-full;
+    -webkit-overflow-scrolling: touch;
   }
 
   .mash-data-table {

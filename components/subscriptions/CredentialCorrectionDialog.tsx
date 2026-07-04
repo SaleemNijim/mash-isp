@@ -287,7 +287,7 @@ export function CredentialCorrectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent dir="rtl" className="max-w-[calc(100%-2rem)] sm:max-w-lg max-h-[90vh] overflow-x-hidden overflow-y-auto">
         <DialogHeader>
           <DialogTitle>تصحيح خلط يوزر / باقة</DialogTitle>
           <DialogDescription>
@@ -295,12 +295,12 @@ export function CredentialCorrectionDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Button
             type="button"
             size="sm"
             variant={mode === 'reassign' ? 'default' : 'outline'}
-            className="flex-1 gap-1.5"
+            className="flex-1 gap-1.5 min-h-10"
             onClick={() => setMode('reassign')}
           >
             <RefreshCw size={14} />
@@ -310,7 +310,7 @@ export function CredentialCorrectionDialog({
             type="button"
             size="sm"
             variant={mode === 'swap' ? 'default' : 'outline'}
-            className="flex-1 gap-1.5"
+            className="flex-1 gap-1.5 min-h-10"
             onClick={() => setMode('swap')}
           >
             <ArrowLeftRight size={14} />
@@ -351,9 +351,10 @@ export function CredentialCorrectionDialog({
               disabled={loading}
             />
 
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <label className="flex items-start gap-2 text-sm cursor-pointer leading-snug">
               <input
                 type="checkbox"
+                className="mt-0.5 shrink-0"
                 checked={fixAmounts}
                 onChange={(e) => setFixAmounts(e.target.checked)}
                 disabled={loading}
@@ -385,22 +386,23 @@ export function CredentialCorrectionDialog({
             </div>
 
             {swapTarget && current && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-2 break-words">
                 <p className="font-medium text-amber-900">معاينة التبديل</p>
-                <p>
-                  <span className="font-mono" dir="ltr">{current.username}</span>
+                <p className="leading-relaxed">
+                  <span className="font-mono break-all" dir="ltr">{current.username}</span>
                   {' '}({current.speed}) ← {swapTarget.customerName}
                 </p>
-                <p>
-                  <span className="font-mono" dir="ltr">{swapTarget.username}</span>
+                <p className="leading-relaxed">
+                  <span className="font-mono break-all" dir="ltr">{swapTarget.username}</span>
                   {' '}({swapTarget.speed}) ← {customerName}
                 </p>
               </div>
             )}
 
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <label className="flex items-start gap-2 text-sm cursor-pointer leading-snug">
               <input
                 type="checkbox"
+                className="mt-0.5 shrink-0"
                 checked={swapFixAmounts}
                 onChange={(e) => setSwapFixAmounts(e.target.checked)}
                 disabled={loading}
@@ -420,14 +422,15 @@ export function CredentialCorrectionDialog({
           />
         </div>
 
-        <DialogFooter className="gap-2 sm:justify-start">
+        <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-start">
           <Button
+            className="w-full sm:w-auto"
             onClick={() => void (mode === 'reassign' ? handleReassign() : handleSwap())}
             disabled={loading}
           >
             {loading ? 'جارٍ التنفيذ…' : mode === 'reassign' ? 'تأكيد إعادة التعيين' : 'تأكيد التبديل'}
           </Button>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+          <Button variant="outline" className="w-full sm:w-auto" onClick={() => onOpenChange(false)} disabled={loading}>
             إلغاء
           </Button>
         </DialogFooter>
