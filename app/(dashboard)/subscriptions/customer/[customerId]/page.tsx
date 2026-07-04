@@ -53,7 +53,8 @@ export default function CustomerSubscriptionHistoryPage() {
   const customerId = params.customerId as string
   const editId = searchParams.get('edit')
   const role = usePermissions((s) => s.role)
-  const isAdmin = role === 'admin' || role === 'super_admin'
+  const canCorrectCredentials =
+    role === 'admin' || role === 'super_admin' || role === 'employee'
   const [correctionOpen, setCorrectionOpen] = useState(false)
 
   const { open: deleteOpen, target, openModal, closeModal } = useDeleteConfirm()
@@ -151,7 +152,7 @@ export default function CustomerSubscriptionHistoryPage() {
         description={customer?.phone ? `رقم التواصل: ${customer.phone}` : undefined}
         actions={
           <div className="flex flex-wrap gap-2">
-            {isAdmin && activeSubscription?.type === 'bb' && (
+            {canCorrectCredentials && activeSubscription?.type === 'bb' && (
               <Button
                 size="sm"
                 variant="outline"

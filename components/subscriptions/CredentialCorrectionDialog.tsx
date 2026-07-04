@@ -49,7 +49,9 @@ interface CurrentAssignment {
 
 function mapRpcError(message: string): string {
   const m = message.toLowerCase()
-  if (m.includes('admin_only')) return 'هذه العملية للمسؤول فقط'
+  if (m.includes('admin_only') || m.includes('staff_only')) {
+    return 'هذه العملية للمسؤول أو الكاشير فقط'
+  }
   if (m.includes('credential_not_available')) return 'اليوزر غير متاح — اختر username آخر من المخزون'
   if (m.includes('both_customers_need_active_credential')) {
     return 'يجب أن يكون لكل مشترك يوزر نشط لتنفيذ التبديل'
@@ -70,7 +72,8 @@ export function CredentialCorrectionDialog({
   const queryClient = useQueryClient()
   const { data: tenant } = useTenant()
   const role = usePermissions((s) => s.role)
-  const isAdmin = role === 'admin' || role === 'super_admin'
+  const canUse =
+    role === 'admin' || role === 'super_admin' || role === 'employee'
 
   const [mode, setMode] = useState<CorrectionMode>('reassign')
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
@@ -280,7 +283,7 @@ export function CredentialCorrectionDialog({
     }
   }
 
-  if (!isAdmin) return null
+  if (!canUse) return null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
