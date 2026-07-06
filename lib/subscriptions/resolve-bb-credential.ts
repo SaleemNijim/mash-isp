@@ -48,7 +48,9 @@ export function isRpcMissingError(message: string): boolean {
   return (
     message.includes('Could not find the function') ||
     message.includes('update_subscription_period_with_debt') ||
-    message.includes('create_and_reserve_bb_credential')
+    message.includes('create_and_reserve_bb_credential') ||
+    message.includes('reassign_customer_credential') ||
+    message.includes('swap_customer_credentials')
   )
 }
 

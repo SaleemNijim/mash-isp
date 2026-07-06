@@ -10,7 +10,12 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { PppPlanSelect } from '@/components/subscriptions/PppPlanSelect'
 import { BbCredentialField } from '@/components/subscriptions/BbCredentialField'
 import type { PppPlan } from '@/lib/ppp/plans'
-import type { BbCredentialInputMode } from '@/lib/subscriptions/resolve-bb-credential'
+import type { PostgrestError } from '@supabase/supabase-js'
+import {
+  isRpcMissingError,
+  RPC_MIGRATION_HINT,
+  type BbCredentialInputMode,
+} from '@/lib/subscriptions/resolve-bb-credential'
 import {
   Dialog,
   DialogContent,
@@ -58,7 +63,18 @@ function mapRpcError(message: string): string {
   }
   if (m.includes('same_customer')) return 'اختر مشتركاً مختلفاً'
   if (m.includes('customer_not_found')) return 'المشترك غير موجود'
+  if (m.includes('not authenticated')) return 'انتهت الجلسة — سجّل الدخول مجدداً'
   return message
+}
+
+function getRpcErrorMessage(err: unknown, fallback: string): string {
+  const msg =
+    err instanceof Error
+      ? err.message
+      : ((err as PostgrestError).message ?? '')
+  if (!msg) return fallback
+  if (isRpcMissingError(msg)) return RPC_MIGRATION_HINT
+  return mapRpcError(msg)
 }
 
 export function CredentialCorrectionDialog({
@@ -243,8 +259,7 @@ export function CredentialCorrectionDialog({
       onSuccess()
       onOpenChange(false)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'فشل التصحيح'
-      toast.error(mapRpcError(msg))
+      toast.error(getRpcErrorMessage(err, 'فشل التصحيح'))
     } finally {
       setLoading(false)
     }
@@ -276,8 +291,7 @@ export function CredentialCorrectionDialog({
       onSuccess()
       onOpenChange(false)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'فشل التبديل'
-      toast.error(mapRpcError(msg))
+      toast.error(getRpcErrorMessage(err, 'فشل التبديل'))
     } finally {
       setLoading(false)
     }
