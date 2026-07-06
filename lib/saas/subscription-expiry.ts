@@ -43,15 +43,24 @@ export function isTenantSubscriptionExpiringSoon(
 
 /**
  * إظهار «تفعيل اشتراك» في Super Admin:
+ * - شركة في التجربة المجانية (تفعيل مبكر — مثلاً لتفعيل Drive)
  * - شركة معطّلة
  * - اشتراك منتهٍ
  * - بقي 3 أيام أو أقل على الانتهاء
  */
 export function shouldShowActivateSubscription(tenant: TenantExpiryFields): boolean {
+  if (tenant.is_trial) return true
   if (!tenant.is_active) return true
   if (isTenantSubscriptionExpired(tenant)) return true
   if (isTenantSubscriptionExpiringSoon(tenant)) return true
   return false
+}
+
+/** الخطة الافتراضية عند فتح حوار التفعيل */
+export function defaultActivatePlanSlug(
+  tenant: TenantExpiryFields,
+): 'pro_monthly' | 'pro_annual' {
+  return tenant.is_trial ? 'pro_monthly' : 'pro_annual'
 }
 
 function arabicDaysLabel(days: number): string {

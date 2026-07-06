@@ -20,6 +20,7 @@ export interface InboxMessage {
   sentAt: string
   senderName: string
   senderRole: string | null
+  senderTenantName: string | null
 }
 
 export interface SentMessage {
@@ -64,6 +65,13 @@ export function senderDisplayName(
     return 'فريق MASH ISP'
   }
   return 'مستخدم'
+}
+
+export function inboxSenderLine(msg: InboxMessage): string {
+  if (msg.channel === 'admin_to_platform' && msg.senderTenantName) {
+    return `${msg.senderTenantName} — ${msg.senderName}`
+  }
+  return msg.senderName
 }
 
 export function priorityBadgeClass(priority: MessagePriority): string {

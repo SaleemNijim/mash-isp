@@ -37,6 +37,7 @@ export const ROUTES = {
   superAdminPlans: '/super-admin/plans',
   superAdminInvoices: '/super-admin/invoices',
   superAdminMessages: '/super-admin/messages',
+  superAdminAdmins: '/super-admin/admins',
 } as const
 
 /** مسارات يُفحص فيها proxy صلاحيات الكاشير (انظر ROUTE_REQUIRED_PERMISSIONS) */

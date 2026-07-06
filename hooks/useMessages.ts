@@ -10,6 +10,7 @@ import {
   type MessageCategory,
   type MessagePriority,
   type SentMessage,
+  inboxSenderLine,
   senderDisplayName,
 } from '@/lib/messages'
 
@@ -28,6 +29,7 @@ function mapRpcInboxRow(row: Record<string, unknown>): InboxMessage {
     sentAt: row.sent_at as string,
     senderName: senderDisplayName(channel, row.sender_name as string | null),
     senderRole: (row.sender_role as string | null) ?? null,
+    senderTenantName: (row.sender_tenant_name as string | null) ?? null,
   }
 }
 
@@ -165,9 +167,20 @@ export function useMessageRealtime(
             })
             const row = Array.isArray(data) ? data[0] : data
             if (row && typeof row === 'object' && 'title' in row) {
-              const peek = row as { title: string; priority: string }
+              const peek = row as {
+                title: string
+                priority: string
+                channel?: string
+                sender_tenant_name?: string | null
+              }
               if (peek.title) title = peek.title
               if (peek.priority) priority = peek.priority as MessagePriority
+              if (
+                peek.channel === 'admin_to_platform' &&
+                peek.sender_tenant_name
+              ) {
+                title = `«${peek.sender_tenant_name}» — ${title}`
+              }
             }
           }
 

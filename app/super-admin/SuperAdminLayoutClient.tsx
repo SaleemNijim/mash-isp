@@ -14,6 +14,7 @@ const NAV = [
   { href: '/super-admin/invoices', label: 'الفواتير' },
   { href: '/super-admin/plans', label: 'الأسعار' },
   { href: '/super-admin/messages', label: 'الرسائل' },
+  { href: '/super-admin/admins', label: 'المسؤولون' },
 ]
 
 function SuperAdminShell({ children }: { children: React.ReactNode }) {

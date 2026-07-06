@@ -2,10 +2,15 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, RefreshCw } from 'lucide-react'
+import { ArrowRight, RefreshCw, Zap } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { shouldShowActivateSubscription } from '@/lib/saas/subscription-expiry'
+import {
+  ActivateSubscriptionDialog,
+  type ActivateSubscriptionTenant,
+} from '@/components/super-admin/ActivateSubscriptionDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -139,6 +144,9 @@ export default function SuperAdminTenantDetailPage() {
   const params = useParams()
   const tenantId = typeof params.id === 'string' ? params.id : ''
   const supabase = createClient()
+  const [activateTarget, setActivateTarget] = useState<ActivateSubscriptionTenant | null>(
+    null,
+  )
 
   const {
     data: tenant,
@@ -245,15 +253,29 @@ export default function SuperAdminTenantDetailPage() {
             )}
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void refetchTenant()}
-        >
-          <RefreshCw className="size-4" />
-          تحديث
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {tenant && shouldShowActivateSubscription(tenant) && (
+            <Button size="sm" onClick={() => setActivateTarget(tenant)}>
+              <Zap className="size-4" />
+              تفعيل اشتراك
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetchTenant()}
+          >
+            <RefreshCw className="size-4" />
+            تحديث
+          </Button>
+        </div>
       </div>
+
+      <ActivateSubscriptionDialog
+        tenant={activateTarget}
+        onClose={() => setActivateTarget(null)}
+        onSuccess={() => void refetchTenant()}
+      />
 
       {isLoading && (
         <p className="text-center text-muted-foreground py-12">جاري التحميل...</p>

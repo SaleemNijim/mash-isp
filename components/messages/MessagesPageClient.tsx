@@ -14,6 +14,7 @@ import {
   CHANNEL_LABELS,
   CATEGORY_LABELS,
   PRIORITY_LABELS,
+  inboxSenderLine,
   priorityBadgeClass,
   type InboxMessage,
   type SentMessage,
@@ -65,7 +66,7 @@ function InboxRow({
             </span>
           </div>
           <p className="text-xs text-mash-text-muted mt-0.5">
-            {msg.senderName} · {formatWhen(msg.sentAt)}
+            {inboxSenderLine(msg)} · {formatWhen(msg.sentAt)}
           </p>
         </div>
       </div>
@@ -121,7 +122,7 @@ function MessageDetail({ msg }: { msg: InboxMessage }) {
       </div>
       <h2 className="text-lg font-medium text-mash-text">{msg.title}</h2>
       <p className="text-sm text-mash-text-muted">
-        من: {msg.senderName} · {formatWhen(msg.sentAt)}
+        من: {inboxSenderLine(msg)} · {formatWhen(msg.sentAt)}
       </p>
       <div className="text-sm text-mash-text-secondary leading-relaxed whitespace-pre-wrap border-t border-mash-border pt-4">
         {msg.body}

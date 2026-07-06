@@ -10,14 +10,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DisableTenantConfirmModal } from '@/components/super-admin/DisableTenantConfirmModal'
 import { EnableTenantConfirmModal } from '@/components/super-admin/EnableTenantConfirmModal'
-import { shouldShowActivateSubscription } from '@/lib/saas/subscription-expiry'
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  ActivateSubscriptionDialog,
+  type ActivateSubscriptionTenant,
+} from '@/components/super-admin/ActivateSubscriptionDialog'
+import { shouldShowActivateSubscription } from '@/lib/saas/subscription-expiry'
 import {
   Table,
   TableBody,
@@ -37,15 +34,6 @@ interface TenantRow {
   subscription_end: string | null
   billing_cycle: 'monthly' | 'annual' | null
   plan_id: string | null
-}
-
-interface SubscriptionPlan {
-  id: string
-  slug: string
-  name: string
-  billing_cycle: 'monthly' | 'annual'
-  price_monthly: number | null
-  price_annual: number | null
 }
 
 type DerivedStatus = 'disabled' | 'trial' | 'active' | 'expired'
@@ -93,52 +81,13 @@ function formatDate(iso: string | null): string {
   })
 }
 
-function planAmount(plan: SubscriptionPlan): number {
-  return plan.billing_cycle === 'annual'
-    ? (plan.price_annual ?? 0)
-    : (plan.price_monthly ?? 0)
-}
-
-function extendSubscriptionEnd(
-  currentEnd: string | null,
-  billingCycle: 'monthly' | 'annual',
-): string {
-  const base =
-    currentEnd && new Date(currentEnd) > new Date()
-      ? new Date(currentEnd)
-      : new Date()
-  const result = new Date(base)
-  if (billingCycle === 'annual') {
-    result.setFullYear(result.getFullYear() + 1)
-  } else {
-    result.setMonth(result.getMonth() + 1)
-  }
-  return result.toISOString()
-}
-
-function invoicePeriod(billingCycle: 'monthly' | 'annual') {
-  const start = new Date()
-  const end = new Date(start)
-  if (billingCycle === 'annual') {
-    end.setFullYear(end.getFullYear() + 1)
-  } else {
-    end.setMonth(end.getMonth() + 1)
-  }
-  return {
-    period_start: start.toISOString().split('T')[0],
-    period_end: end.toISOString().split('T')[0],
-  }
-}
-
 export default function SuperAdminTenantsPage() {
   const supabase = createClient()
   const queryClient = useQueryClient()
 
-  const [activateTarget, setActivateTarget] = useState<TenantRow | null>(null)
-  const [selectedSlug, setSelectedSlug] = useState<'pro_monthly' | 'pro_annual'>(
-    'pro_annual',
+  const [activateTarget, setActivateTarget] = useState<ActivateSubscriptionTenant | null>(
+    null,
   )
-  const [activating, setActivating] = useState(false)
   const [disabling, setDisabling] = useState<string | null>(null)
   const [enabling, setEnabling] = useState<string | null>(null)
   const [disableTarget, setDisableTarget] = useState<TenantRow | null>(null)
@@ -157,82 +106,6 @@ export default function SuperAdminTenantsPage() {
       return data ?? []
     },
   })
-
-  const { data: proPlans = [] } = useQuery<SubscriptionPlan[]>({
-    queryKey: ['super-admin-pro-plans'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('subscription_plans')
-        .select('id,slug,name,billing_cycle,price_monthly,price_annual')
-        .in('slug', ['pro_monthly', 'pro_annual'])
-        .eq('is_active', true)
-      if (error) throw error
-      return (data ?? []) as SubscriptionPlan[]
-    },
-  })
-
-  const monthlyPlan = proPlans.find((p) => p.slug === 'pro_monthly')
-  const annualPlan = proPlans.find((p) => p.slug === 'pro_annual')
-  const selectedPlan = proPlans.find((p) => p.slug === selectedSlug)
-
-  async function handleActivate() {
-    if (!activateTarget || !selectedPlan) return
-
-    setActivating(true)
-    try {
-      const amount = planAmount(selectedPlan)
-      const { period_start, period_end } = invoicePeriod(
-        selectedPlan.billing_cycle,
-      )
-      const newSubscriptionEnd = extendSubscriptionEnd(
-        activateTarget.subscription_end,
-        selectedPlan.billing_cycle,
-      )
-
-      const { error: invoiceError } = await supabase
-        .from('mash_invoices')
-        .insert({
-          tenant_id: activateTarget.id,
-          plan_id: selectedPlan.id,
-          billing_cycle: selectedPlan.billing_cycle,
-          amount,
-          period_start,
-          period_end,
-          status: 'paid',
-          paid_at: new Date().toISOString(),
-        })
-
-      if (invoiceError) throw invoiceError
-
-      const { data: updatedTenant, error: tenantError } = await supabase
-        .from('tenants')
-        .update({
-          subscription_end: newSubscriptionEnd,
-          is_trial: false,
-          is_active: true,
-          billing_cycle: selectedPlan.billing_cycle,
-          plan_id: selectedPlan.id,
-        })
-        .eq('id', activateTarget.id)
-        .select('id')
-        .single()
-
-      if (tenantError) throw tenantError
-      if (!updatedTenant) {
-        throw new Error('لم يتم تحديث الشركة — تحقق من صلاحيات Super Admin')
-      }
-
-      toast.success(`تم تفعيل ${selectedPlan.name} لـ «${activateTarget.name}»`)
-      setActivateTarget(null)
-      void queryClient.invalidateQueries({ queryKey: ['super-admin-tenants'] })
-      void queryClient.invalidateQueries({ queryKey: ['super-admin-invoices'] })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'حدث خطأ'
-      toast.error('فشل التفعيل: ' + msg)
-    } finally {
-      setActivating(false)
-    }
-  }
 
   async function confirmDisable(): Promise<boolean> {
     if (!disableTarget) return false
@@ -359,10 +232,7 @@ export default function SuperAdminTenantsPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
-                            setSelectedSlug('pro_annual')
-                            setActivateTarget(tenant)
-                          }}
+                          onClick={() => setActivateTarget(tenant)}
                         >
                           <Zap className="size-3.5" />
                           تفعيل اشتراك
@@ -397,90 +267,10 @@ export default function SuperAdminTenantsPage() {
         </Table>
       </div>
 
-      <Dialog
-        open={!!activateTarget}
-        onOpenChange={(open) => !open && setActivateTarget(null)}
-      >
-        <DialogContent dir="rtl" className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              تفعيل اشتراك — {activateTarget?.name}
-            </DialogTitle>
-          </DialogHeader>
-
-          {activateTarget && !activateTarget.is_active && (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30">
-              هذه الشركة معطّلة حالياً — سيُعاد تفعيلها تلقائياً مع تمديد الاشتراك.
-            </p>
-          )}
-
-          <div className="space-y-3">
-            {monthlyPlan && (
-              <label
-                className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 ${
-                  selectedSlug === 'pro_monthly'
-                    ? 'border-primary bg-primary-50'
-                    : 'border-border bg-card'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="activate-plan"
-                  checked={selectedSlug === 'pro_monthly'}
-                  onChange={() => setSelectedSlug('pro_monthly')}
-                />
-                <div>
-                  <div className="font-bold">{monthlyPlan.name}</div>
-                  <div className="text-lg font-bold text-primary-600">
-                    {monthlyPlan.price_monthly} ₪
-                    <span className="text-sm font-normal text-muted-foreground">
-                      /شهر
-                    </span>
-                  </div>
-                </div>
-              </label>
-            )}
-
-            {annualPlan && (
-              <label
-                className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 ${
-                  selectedSlug === 'pro_annual'
-                    ? 'border-primary bg-primary-50'
-                    : 'border-border bg-card'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="activate-plan"
-                  checked={selectedSlug === 'pro_annual'}
-                  onChange={() => setSelectedSlug('pro_annual')}
-                />
-                <div>
-                  <div className="font-bold">{annualPlan.name}</div>
-                  <div className="text-lg font-bold text-primary-600">
-                    {annualPlan.price_annual} ₪
-                    <span className="text-sm font-normal text-muted-foreground">
-                      /سنة
-                    </span>
-                  </div>
-                </div>
-              </label>
-            )}
-          </div>
-
-          <DialogFooter className="gap-2 sm:justify-start">
-            <Button
-              onClick={() => void handleActivate()}
-              disabled={activating || !selectedPlan}
-            >
-              {activating ? 'جاري التفعيل...' : 'تأكيد التفعيل'}
-            </Button>
-            <Button variant="outline" onClick={() => setActivateTarget(null)}>
-              إلغاء
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ActivateSubscriptionDialog
+        tenant={activateTarget}
+        onClose={() => setActivateTarget(null)}
+      />
 
       <DisableTenantConfirmModal
         open={disableTarget !== null}
