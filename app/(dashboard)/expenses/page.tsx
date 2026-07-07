@@ -117,7 +117,7 @@ function ExpensesContent() {
   const [editNotes, setEditNotes] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
-  const { open, target, openModal, closeModal } = useDeleteConfirm<ExpenseRow>()
+  const { open, target, openModal, closeModal } = useDeleteConfirm()
 
   const paidFrom = dateFrom ? dayStartISO(dateFrom) : null
   const paidTo = dateTo ? dayEndISO(dateTo) : null
@@ -448,7 +448,15 @@ function ExpensesContent() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                onClick={() => openModal(row)}
+                                onClick={() =>
+                                  openModal({
+                                    id: row.id,
+                                    table: 'expenses',
+                                    name: `${row.description?.trim() || row.beneficiary?.trim() || 'مصروف'} — ${formatMoney(row.amount)}`,
+                                    consequences:
+                                      'سيُعاد المبلغ للحساب البنكي إن كان المصروف إلكترونياً. يمكنك الاسترجاع من سلة المحذوفات.',
+                                  })
+                                }
                                 aria-label="حذف"
                               >
                                 <Trash2 size={14} />
@@ -569,12 +577,8 @@ function ExpensesContent() {
         open={open}
         onClose={closeModal}
         onConfirm={handleDeleteConfirm}
-        recordName={
-          target
-            ? `${target.description?.trim() || target.beneficiary?.trim() || 'مصروف'} — ${formatMoney(target.amount)}`
-            : ''
-        }
-        consequences="سيُعاد المبلغ للحساب البنكي إن كان المصروف إلكترونياً. يمكنك الاسترجاع من سلة المحذوفات."
+        recordName={target?.name ?? ''}
+        consequences={target?.consequences}
       />
     </div>
   )

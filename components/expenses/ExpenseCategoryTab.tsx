@@ -19,7 +19,7 @@ export function ExpenseCategoryTab() {
   const { data: tenant } = useTenant()
   const [newName, setNewName] = useState('')
   const [adding, setAdding] = useState(false)
-  const { open, target, openModal, closeModal } = useDeleteConfirm<ExpenseCategory>()
+  const { open, target, openModal, closeModal } = useDeleteConfirm()
 
   const { data: categories = [], isLoading } = useQuery<ExpenseCategory[]>({
     queryKey: ['expense-categories', tenant?.id],
@@ -123,7 +123,14 @@ export function ExpenseCategoryTab() {
                 variant="ghost"
                 size="sm"
                 className="text-destructive hover:text-destructive h-8"
-                onClick={() => openModal(cat)}
+                onClick={() =>
+                  openModal({
+                    id: cat.id,
+                    table: 'expense_categories',
+                    name: cat.name,
+                    consequences: 'لن تُحذف المصروفات المسجّلة سابقاً بهذه الفئة.',
+                  })
+                }
               >
                 <Trash2 size={14} />
               </Button>
@@ -137,7 +144,7 @@ export function ExpenseCategoryTab() {
         onClose={closeModal}
         onConfirm={handleDeleteConfirm}
         recordName={target?.name ?? ''}
-        consequences="لن تُحذف المصروفات المسجّلة سابقاً بهذه الفئة."
+        consequences={target?.consequences}
       />
     </div>
   )
