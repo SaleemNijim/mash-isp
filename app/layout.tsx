@@ -22,10 +22,6 @@ export const metadata: Metadata = {
   },
   description:
     "نظام SaaS متكامل لإدارة شركات الإنترنت — مشتركون، بطاقات، شبكة، تقارير، وأكثر.",
-  icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
-    apple: "/apple-icon",
-  },
 };
 
 export default function RootLayout({

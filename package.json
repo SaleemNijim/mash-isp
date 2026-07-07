@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "test:routes": "vitest run __tests__/routes",
     "supabase": "supabase",
-    "db:push": "supabase db push"
+    "db:push": "supabase db push",
+    "db:push:all": "supabase db push --include-all"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
