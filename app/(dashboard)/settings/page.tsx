@@ -7,11 +7,12 @@ import { GoogleDriveSyncSection } from '@/components/settings/GoogleDriveSyncSec
 import { DataPanel } from '@/components/shared/DataPanel'
 import { PageHeader } from '@/components/shared/PageHeader'
 import Link from 'next/link'
-import { Landmark, KeyRound, Users, ChevronLeft } from 'lucide-react'
+import { Landmark, KeyRound, Users, ChevronLeft, Receipt } from 'lucide-react'
 import { ROUTES } from '@/lib/navigation'
 
 const QUICK_LINKS = [
   { href: ROUTES.bankAccounts, label: 'الحسابات البنكية', icon: Landmark },
+  { href: ROUTES.expenses, label: 'المصروفات', icon: Receipt },
   { href: ROUTES.permissions, label: 'الصلاحيات والموظفون', icon: Users },
   { href: ROUTES.credentials, label: 'PPP', icon: KeyRound },
 ]
@@ -43,7 +44,7 @@ export default function SettingsPage() {
 
       <DataPanel className="p-5">
         <h2 className="font-semibold mb-3">اختصارات</h2>
-        <div className="grid gap-0 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x sm:divide-x-reverse divide-border">
+        <div className="grid gap-0 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x sm:divide-x-reverse divide-border">
           {QUICK_LINKS.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}

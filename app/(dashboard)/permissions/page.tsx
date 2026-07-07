@@ -31,7 +31,15 @@ function invalidateTenantUserQueries(queryClient: ReturnType<typeof useQueryClie
 
 export default function PermissionsPage() {
   return (
-    <PermissionGuard permission="manage_users">
+    <PermissionGuard
+      anyOf={['manage_users', 'manage_permissions']}
+      fallback={
+        <div dir="rtl" className="py-16 text-center text-muted-foreground">
+          <p className="text-lg font-medium">الصلاحيات والمستخدمون</p>
+          <p className="text-sm mt-2">هذه الصفحة تتطلب صلاحية إدارة المستخدمين أو تعديل صلاحيات الآخرين.</p>
+        </div>
+      }
+    >
       <PermissionsContent />
     </PermissionGuard>
   )
@@ -268,6 +276,26 @@ function PermissionsContent() {
 
       <section>
         <h2 className="mb-4 text-base font-semibold text-foreground">مصفوفة الصلاحيات</h2>
+        <DataPanel className="mb-4 p-4 text-sm text-muted-foreground space-y-2">
+          <p className="font-medium text-foreground">دليل سريع — ماذا تفتح كل صلاحية؟</p>
+          <ul className="list-disc list-inside space-y-1 leading-relaxed">
+            <li>
+              <span className="text-foreground">إدارة المصروفات</span> — صفحة المصروفات وتسجيل الصرف
+            </li>
+            <li>
+              <span className="text-foreground">إدارة الحسابات البنكية</span> — الحسابات البنكية ودفتر التحويلات
+            </li>
+            <li>
+              <span className="text-foreground">عرض التقارير</span> — التقارير المالية (للمدير افتراضياً)
+            </li>
+            <li>
+              <span className="text-foreground">تعديل صلاحيات الآخرين</span> — تعديل مصفوفة الصلاحيات دون إضافة موظفين
+            </li>
+          </ul>
+          <p className="text-xs pt-1">
+            صلاحيات «الإدارة والحذف» (مستخدمون، صلاحيات، حذف) يمنحها مدير الشركة فقط.
+          </p>
+        </DataPanel>
         <PermissionMatrix />
       </section>
 

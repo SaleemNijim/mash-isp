@@ -5,6 +5,10 @@ import {
   type RouterDriveRow,
 } from '@/lib/excel/drive-sync-exports'
 import {
+  buildMonthlyExpensesWorkbookBuffer,
+  getMonthlyExpensesFileName,
+} from '@/lib/excel/monthly-expenses-export'
+import {
   buildMonthlyRenewalsWorkbookBuffer,
   getMonthlyRenewalsFileName,
   type MonthlyRenewalExportRow,
@@ -13,6 +17,7 @@ import {
   buildMonthlySalesWorkbookBuffer,
   getMonthlySalesFileName,
 } from '@/lib/excel/monthly-sales-export'
+import { fetchExpensesGroupedByMonth } from '@/lib/expenses/fetch-expenses-by-month'
 import { fetchCardSalesGroupedByMonth } from '@/lib/sales/fetch-card-sales-by-month'
 import { deleteDriveFile, ensureDriveFolder, uploadExcelFile } from '@/lib/google-drive/drive-api'
 import { getValidAccessToken, type DriveSyncTokens } from '@/lib/google-drive/client'
@@ -393,6 +398,54 @@ async function syncMonthlyRenewals(options: {
   return count
 }
 
+async function syncMonthlyExpenses(options: {
+  admin: SupabaseClient
+  accessToken: string
+  tenantId: string
+  tenantName: string
+  rootFolderId: string
+  fileIds: Record<string, string>
+}): Promise<number> {
+  const expensesFolderId = await ensureDriveFolder({
+    accessToken: options.accessToken,
+    name: 'سجل المصروفات',
+    parentId: options.rootFolderId,
+  })
+  options.fileIds['folder:expenses'] = expensesFolderId
+
+  const grouped = await fetchExpensesGroupedByMonth(options.admin, options.tenantId)
+
+  let count = 0
+  const currentKeys = new Set<string>()
+  for (const [month, rows] of grouped) {
+    const key = `expenses:${month}`
+    currentKeys.add(key)
+    const buffer = await buildMonthlyExpensesWorkbookBuffer({
+      companyName: options.tenantName,
+      month,
+      rows,
+    })
+    const id = await uploadExcelFile({
+      accessToken: options.accessToken,
+      folderId: expensesFolderId,
+      fileId: options.fileIds[key],
+      fileName: getMonthlyExpensesFileName(month),
+      buffer,
+    })
+    options.fileIds[key] = id
+    count += 1
+  }
+
+  for (const [key, fileId] of Object.entries(options.fileIds)) {
+    if (key.startsWith('expenses:') && !currentKeys.has(key)) {
+      await deleteDriveFile({ accessToken: options.accessToken, fileId })
+      delete options.fileIds[key]
+    }
+  }
+
+  return count
+}
+
 export async function syncTenantDrive(admin: SupabaseClient, record: DriveSyncRecord): Promise<SyncResult> {
   const tenantName = await getTenantName(admin, record.tenant_id)
   const { accessToken, refreshed } = await getValidAccessToken(record)
@@ -446,6 +499,16 @@ export async function syncTenantDrive(admin: SupabaseClient, record: DriveSyncRe
   await persistSyncProgress(admin, record.tenant_id, progress)
 
   filesUploaded += await syncMonthlyRenewals({
+    admin,
+    accessToken,
+    tenantId: record.tenant_id,
+    tenantName,
+    rootFolderId: folderId,
+    fileIds,
+  })
+  await persistSyncProgress(admin, record.tenant_id, progress)
+
+  filesUploaded += await syncMonthlyExpenses({
     admin,
     accessToken,
     tenantId: record.tenant_id,

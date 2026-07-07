@@ -26,7 +26,7 @@
 | RPC | Grant | Migration | Called From | Notes |
 |-----|-------|-----------|-------------|-------|
 | `get_my_user_profile()` | authenticated | 013 | `useTenant`, `proxy.ts`, permissions | Returns role, tenant_id, is_active, force_logout_at |
-| `create_tenant_with_trial(company, admin_name)` | authenticated | 004→013 | `/register`, login setup | Idempotent since 013 — returns existing tenant_id |
+| `create_tenant_with_trial(company, admin_name, phone)` | authenticated | 004→013→**069** | `/register`, login setup | Idempotent since 013; seeds expense categories (069) |
 
 ---
 
@@ -88,6 +88,7 @@
 | `record_warehouse_movement(item_id, type, qty, notes?)` | authenticated | 006 | Movement + quantity update |
 | `sell_cards(distributor_id, commission, method, bank_id, proof, items, nonce)` | authenticated | 008→**009** | Distributor sale atomic |
 | `sell_retail_cards(product_id, qty, price, type, method, bank_id, notes, proof, nonce)` | authenticated | 008→**009** | Retail sale atomic |
+| `record_expense(category_id, amount, method, bank_id?, source_label?, description?, beneficiary?, notes?, paid_at?)` | authenticated | **069** | Expense + bank debit atomic |
 
 ### ⚠️ Breaking Change: sell_cards (008 → 009)
 
@@ -110,6 +111,7 @@
 | `reverse_stock_on_batch_delete()` | 003 | `card_batches` soft delete |
 | `log_mac_change()` | 003 | `network_routers` MAC change |
 | `cancel_debt_on_payment()` | 003 | `payments` INSERT |
+| `sync_expense_bank_balance()` | **069** | `expenses` UPDATE `is_deleted` |
 
 ---
 
@@ -147,7 +149,7 @@ GRANT EXECUTE ON FUNCTION ... TO authenticated;
 
 | Function | Versions | Latest |
 |----------|----------|--------|
-| `create_tenant_with_trial` | 004, 013 | 013 (idempotent) |
+| `create_tenant_with_trial` | 004, 013, **069** | 069 (phone + expense category seed) |
 | `sell_cards` | 008, 009 | 009 |
 | `sell_retail_cards` | 008, 009 | 009 |
 | `users_message_sender_read` | policy 011, helper 019 | 019 |

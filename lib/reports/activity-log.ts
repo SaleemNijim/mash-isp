@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchSalesInRange, type SaleKind } from '@/lib/sales/fetch-sales'
 
-export type ActivitySource = 'sale' | 'audit'
+export type ActivitySource = 'sale' | 'audit' | 'expense'
 
 export interface ActivityLogEntry {
   id: string
@@ -39,6 +39,7 @@ const TABLE_LABELS: Record<string, string> = {
   warehouse_items: 'مستودع',
   payments: 'دفعة',
   debts: 'دين',
+  expenses: 'مصروف',
 }
 
 async function loadUserNames(
@@ -85,7 +86,7 @@ export async function fetchAuditLogEntries(
 ): Promise<ActivityLogEntry[]> {
   const { data, error } = await supabase
     .from('audit_logs')
-    .select('id, table_name, record_id, action, performed_at, performed_by')
+    .select('id, table_name, record_id, action, performed_at, performed_by, old_data')
     .eq('tenant_id', tenantId)
     .eq('is_deleted', false)
     .gte('performed_at', rangeStart)
@@ -101,12 +102,17 @@ export async function fetchAuditLogEntries(
   return (data ?? []).map((row) => {
     const tableLabel = TABLE_LABELS[row.table_name] ?? row.table_name
     const actionLabel = AUDIT_ACTION_LABELS[row.action] ?? row.action
+    const oldData = row.old_data as { amount?: number } | null | undefined
+    const amountFromAudit =
+      row.table_name === 'expenses' && row.action === 'SOFT_DELETED' && oldData?.amount != null
+        ? Number(oldData.amount)
+        : null
     return {
       id: `audit-${row.id}`,
       source: 'audit' as const,
       action: actionLabel,
       detail: `${tableLabel}${row.record_id ? ` — ${String(row.record_id).slice(0, 8)}…` : ''}`,
-      amount: null,
+      amount: amountFromAudit,
       performedAt: row.performed_at as string,
       performerId: row.performed_by as string | null,
       performerName: row.performed_by
@@ -115,6 +121,43 @@ export async function fetchAuditLogEntries(
       tableName: row.table_name,
     }
   })
+}
+
+export async function fetchExpenseActivityLog(
+  supabase: SupabaseClient,
+  tenantId: string,
+  rangeStart: string,
+  rangeEnd: string,
+  limit = 200,
+): Promise<ActivityLogEntry[]> {
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('id, amount, description, beneficiary, paid_at, recorded_by')
+    .eq('tenant_id', tenantId)
+    .eq('is_deleted', false)
+    .gte('paid_at', rangeStart)
+    .lte('paid_at', rangeEnd)
+    .order('paid_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+
+  const performerIds = (data ?? []).map((r) => r.recorded_by).filter(Boolean) as string[]
+  const names = await loadUserNames(supabase, performerIds)
+
+  return (data ?? []).map((row) => ({
+    id: `expense-${row.id}`,
+    source: 'expense' as const,
+    action: 'تسجيل مصروف',
+    detail: row.description?.trim() || row.beneficiary?.trim() || 'مصروف',
+    amount: Number(row.amount),
+    performedAt: row.paid_at as string,
+    performerId: row.recorded_by as string | null,
+    performerName: row.recorded_by
+      ? (names.get(row.recorded_by as string) ?? 'مستخدم')
+      : 'غير مسجّل',
+    tableName: 'expenses',
+  }))
 }
 
 export function fetchPerformerBreakdown(

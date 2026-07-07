@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+export type LedgerDirection = 'in' | 'out'
+
 export interface LedgerEntry {
   id: string
   recorded_at: string
@@ -9,13 +11,16 @@ export interface LedgerEntry {
   source_account_label: string | null
   notes: string | null
   bank_account_id: string | null
-  kind: 'payment' | 'distributor_receipt' | 'distributor_sale' | 'retail_sale'
+  kind: 'payment' | 'distributor_receipt' | 'distributor_sale' | 'retail_sale' | 'expense'
+  direction: LedgerDirection
 }
 
 export interface FinancialOverview {
   cashTotal: number
+  cashExpenseTotal: number
   debtTotal: number
   bankInflowTotal: number
+  bankOutflowTotal: number
   ledger: LedgerEntry[]
 }
 
@@ -32,6 +37,7 @@ export async function fetchFinancialOverview(
     receiptsRes,
     distSalesRes,
     retailSalesRes,
+    expensesRes,
   ] = await Promise.all([
     supabase
       .from('payments')
@@ -70,6 +76,13 @@ export async function fetchFinancialOverview(
       .select('id, total_amount, method, bank_account_id, source_account_label, created_at, notes')
       .eq('tenant_id', tenantId)
       .eq('is_deleted', false),
+    supabase
+      .from('expenses')
+      .select(
+        'id, amount, method, bank_account_id, source_account_label, paid_at, created_at, description, beneficiary, notes, category_id, expense_categories(name)',
+      )
+      .eq('tenant_id', tenantId)
+      .eq('is_deleted', false),
   ])
 
   if (paymentsRes.error) throw paymentsRes.error
@@ -78,9 +91,12 @@ export async function fetchFinancialOverview(
   if (receiptsRes.error) throw receiptsRes.error
   if (distSalesRes.error) throw distSalesRes.error
   if (retailSalesRes.error) throw retailSalesRes.error
+  if (expensesRes.error) throw expensesRes.error
 
   let cashTotal = 0
+  let cashExpenseTotal = 0
   let bankInflowTotal = 0
+  let bankOutflowTotal = 0
   const ledger: LedgerEntry[] = []
 
   for (const row of paymentsRes.data ?? []) {
@@ -104,6 +120,7 @@ export async function fetchFinancialOverview(
       notes: row.notes,
       bank_account_id: row.bank_account_id,
       kind: 'payment',
+      direction: 'in',
     })
   }
 
@@ -128,6 +145,7 @@ export async function fetchFinancialOverview(
       notes: row.notes,
       bank_account_id: row.bank_account_id,
       kind: 'distributor_receipt',
+      direction: 'in',
     })
   }
 
@@ -149,6 +167,7 @@ export async function fetchFinancialOverview(
         notes: null,
         bank_account_id: row.bank_account_id,
         kind: 'distributor_sale',
+        direction: 'in',
       })
     }
   }
@@ -171,8 +190,40 @@ export async function fetchFinancialOverview(
         notes: row.notes,
         bank_account_id: row.bank_account_id,
         kind: 'retail_sale',
+        direction: 'in',
       })
     }
+  }
+
+  for (const row of expensesRes.data ?? []) {
+    const amount = Number(row.amount)
+    const method = row.method as string
+    const categories = row.expense_categories as { name: string } | { name: string }[] | null
+    const categoryName = Array.isArray(categories)
+      ? categories[0]?.name
+      : categories?.name
+
+    if (method === 'cash') cashExpenseTotal += amount
+    if (METHODS_BANK.includes(method)) bankOutflowTotal += amount
+
+    const label =
+      row.description?.trim() ||
+      row.beneficiary?.trim() ||
+      categoryName ||
+      'مصروف'
+
+    ledger.push({
+      id: row.id,
+      recorded_at: row.paid_at ?? row.created_at,
+      amount,
+      method,
+      counterparty: label,
+      source_account_label: row.source_account_label,
+      notes: row.notes,
+      bank_account_id: row.bank_account_id,
+      kind: 'expense',
+      direction: 'out',
+    })
   }
 
   const customerDebt = (debtsRes.data ?? []).reduce(
@@ -190,8 +241,10 @@ export async function fetchFinancialOverview(
 
   return {
     cashTotal,
+    cashExpenseTotal,
     debtTotal: customerDebt + distributorDebt,
     bankInflowTotal,
+    bankOutflowTotal,
     ledger,
   }
 }

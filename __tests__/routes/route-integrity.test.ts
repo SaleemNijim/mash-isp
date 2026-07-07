@@ -50,6 +50,7 @@ describe('STATIC_ROUTE_MANIFEST', () => {
       '/distributors',
       '/card-inventory',
       '/reports',
+      '/expenses',
       '/audit-log',
       '/recycle-bin',
       '/settings',

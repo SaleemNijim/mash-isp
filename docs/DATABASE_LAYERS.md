@@ -33,7 +33,7 @@
 | الجدول | الغرض |
 |--------|-------|
 | `users` | `id = auth.uid()` |
-| `permissions` | 12 كود (seed 005) |
+| `permissions` | 19+ كود (seed 005 + لاحقاً) |
 | `user_permissions` | PK `(user_id, permission)` |
 
 ### ISP Operations
@@ -42,7 +42,7 @@
 |----------|---------|
 | Customers & subs | `customers`, `subscriptions`, `internet_credentials`, `customer_credential_usage` |
 | Cards | `card_products`, `card_batches`, `card_batch_items`, `card_distributor_sales`, `card_sale_items`, `card_retail_sales`*, `distributors`* |
-| Payments | `payments`, `payment_proofs`, `pending_tasks`, `debts`, `company_bank_accounts` |
+| Payments | `payments`, `payment_proofs`, `pending_tasks`, `debts`, `company_bank_accounts`, `expense_categories`, `expenses` |
 | Network | `network_ports`, `network_routers`, `network_extenders`, `router_mac_history` |
 | Warehouse | `warehouse_items`, `warehouse_movements` |
 | System | `imports`, `audit_logs`, `sync_nonces` |
@@ -104,6 +104,7 @@
 | `trg_reverse_batch_stock` | `card_batches` | soft delete → stock− |
 | `trg_log_mac_change` | `network_routers` | MAC change → history |
 | `trg_cancel_debt_on_payment` | `payments` | INSERT → cancel debt |
+| `trg_sync_expense_bank_balance` | `expenses` | soft delete / restore → `current_total` ± |
 
 ### Scheduled Jobs (005 — pg_cron)
 
@@ -115,7 +116,7 @@
 
 ---
 
-## Layer 4 — Business RPCs (004, 006, 008–010, 013–019)
+## Layer 4 — Business RPCs (004, 006, 008–010, 013–019, 069)
 
 **Atomic operations** — العميل يستدعي RPC بدلاً من multi-step.
 
@@ -131,6 +132,7 @@
 | Auth profile | `get_my_user_profile` | 013 |
 | Credentials | `set/reveal/bulk_insert_credentials` | 014 |
 | Admin | `list_tenant_users`, `set_employee_permission`, `suspend_tenant_employee` | 015, 018, 019 |
+| Expenses | `record_expense`, `seed_expense_categories_for_tenant` | 069 |
 
 القائمة الكاملة: [`RPC_CATALOG.md`](./RPC_CATALOG.md).
 
@@ -154,6 +156,8 @@
 | `idx_payments_tenant_paid_at` | `payments` |
 | `idx_pending_tasks_tenant_status_due` | `pending_tasks` |
 | `idx_audit_logs_tenant_performed_at` | `audit_logs` |
+| `idx_expenses_tenant_paid_at` | `expenses` |
+| `idx_expenses_tenant_category` | `expenses` |
 | `idx_message_recipients_user_unread` | `message_recipients` |
 | `idx_internal_messages_sender_created` | `internal_messages` |
 
@@ -197,3 +201,4 @@ SECURITY DEFINER RPC ──→ cross-table reads/writes
 | Direct UPDATE users (suspend) | `suspend_tenant_employee()` | 019 |
 | Cross-table RLS EXISTS | SECURITY DEFINER helpers | 019 |
 | `sell_cards(name, …)` | `sell_cards(distributor_id, …)` | 009 |
+| — | `expense_categories` + `expenses` + `record_expense` | 069 |

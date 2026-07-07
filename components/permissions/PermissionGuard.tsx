@@ -4,7 +4,9 @@ import { usePermissions } from '@/hooks/usePermissions'
 
 interface PermissionGuardProps {
   /** Permission code that must be present for children to render */
-  permission: string
+  permission?: string
+  /** أي صلاحية من القائمة تكفي — يُستخدم بدل `permission` عند التوفّر */
+  anyOf?: string[]
   children: React.ReactNode
   /** Rendered when permission is absent — defaults to nothing */
   fallback?: React.ReactNode
@@ -16,6 +18,7 @@ interface PermissionGuardProps {
  */
 export function PermissionGuard({
   permission,
+  anyOf,
   children,
   fallback = null,
 }: PermissionGuardProps) {
@@ -24,7 +27,13 @@ export function PermissionGuard({
 
   if (loading) return null
 
-  if (!hasPermission(permission)) {
+  const allowed = anyOf?.length
+    ? anyOf.some((code) => hasPermission(code))
+    : permission
+      ? hasPermission(permission)
+      : true
+
+  if (!allowed) {
     return <>{fallback}</>
   }
 

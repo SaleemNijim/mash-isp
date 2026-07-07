@@ -190,6 +190,7 @@ function BankAccountsContent() {
     void queryClient.invalidateQueries({ queryKey: ['bank-accounts-active'] })
     void queryClient.invalidateQueries({ queryKey: ['bank-account-payment-totals'] })
     void queryClient.invalidateQueries({ queryKey: ['financial-overview'] })
+    void queryClient.invalidateQueries({ queryKey: ['expenses'] })
   }
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -324,11 +325,17 @@ function BankAccountsContent() {
       </div>
 
       {overview && (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <DataPanel className="p-4">
-            <p className="text-sm text-muted-foreground">إجمالي النقدي</p>
+            <p className="text-sm text-muted-foreground">إجمالي النقدي الوارد</p>
             <p className="text-2xl font-bold tabular-nums mt-1 text-mash-success-text">
               {formatMoney(overview.cashTotal)}
+            </p>
+          </DataPanel>
+          <DataPanel className="p-4">
+            <p className="text-sm text-muted-foreground">مصروفات نقدية</p>
+            <p className="text-2xl font-bold tabular-nums mt-1 text-destructive">
+              {formatMoney(overview.cashExpenseTotal)}
             </p>
           </DataPanel>
           <DataPanel className="p-4">
@@ -338,9 +345,21 @@ function BankAccountsContent() {
             </p>
           </DataPanel>
           <DataPanel className="p-4">
-            <p className="text-sm text-muted-foreground">تحويلات بنكية مسجّلة</p>
+            <p className="text-sm text-muted-foreground">تحويلات واردة</p>
             <p className="text-2xl font-bold tabular-nums mt-1">
               {formatMoney(overview.bankInflowTotal)}
+            </p>
+          </DataPanel>
+          <DataPanel className="p-4">
+            <p className="text-sm text-muted-foreground">مصروفات بنكية</p>
+            <p className="text-2xl font-bold tabular-nums mt-1 text-destructive">
+              {formatMoney(overview.bankOutflowTotal)}
+            </p>
+          </DataPanel>
+          <DataPanel className="p-4">
+            <p className="text-sm text-muted-foreground">صافي البنك (دفتر)</p>
+            <p className="text-2xl font-bold tabular-nums mt-1">
+              {formatMoney(overview.bankInflowTotal - overview.bankOutflowTotal)}
             </p>
           </DataPanel>
         </div>

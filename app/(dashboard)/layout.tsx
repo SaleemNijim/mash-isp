@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Users, Wifi, CreditCard, Package,
   Network, DollarSign, FileText, FileSpreadsheet, Settings, Menu, X, ClipboardList,
   ShoppingCart, KeyRound, Landmark, LogOut, Truck, PanelLeftClose, PanelLeft, Mail,
-  SlidersHorizontal, Trash2, ScrollText,
+  SlidersHorizontal, Trash2, ScrollText, Receipt,
   type LucideIcon,
 } from 'lucide-react'
 import { TenantBrand } from '@/components/shared/TenantBrand'
@@ -51,6 +51,7 @@ const NAV_ICONS: Record<DashboardNavIcon, LucideIcon> = {
   SlidersHorizontal,
   Trash2,
   ScrollText,
+  Receipt,
 }
 
 function DashboardShell({ children }: { children: React.ReactNode }) {

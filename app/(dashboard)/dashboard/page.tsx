@@ -23,14 +23,23 @@ import {
   CreditCard,
   Landmark,
   Loader2,
+  Receipt,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
 import { AlertsPanel, type DashboardAlert } from '@/components/dashboard/AlertsPanel'
 import { countPendingInbox } from '@/lib/pending-tasks/inbox'
 import { fetchSalesInRange, summarizeSales, type SaleRow } from '@/lib/sales/fetch-sales'
-import { dayEndISO, monthStartISO, todayDateStr, todayStartISO } from '@/lib/sales/date-range'
+import {
+  dayEndISO,
+  monthEndISO,
+  monthStartISO,
+  todayDateStr,
+  todayStartISO,
+} from '@/lib/sales/date-range'
 import { formatAmount } from '@/lib/format-money'
+import { fetchFinancePeriodSummary } from '@/lib/finance/summary'
+import { ROUTES } from '@/lib/navigation'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +47,8 @@ interface KpiData {
   activeSubscriptions: number
   expiringIn7Days: number
   todayRevenue: number
+  todayExpenses: number
+  monthExpenses: number
   activeDebts: number
   pendingTasks: number
   bbAvailable: number
@@ -222,9 +233,16 @@ async function fetchDashboardData(
   const in7 = addDaysISO(7)
   const todayStart = startOfTodayISO()
   const todayEnd = dayEndISO(today)
+  const monthStart = monthStartISO()
+  const monthEnd = monthEndISO()
   const subscriptionRangeStart = monthStartISO(new Date(tenantCreatedAt))
   const subscriptionRangeEnd = dayEndISO(today)
   const overdueCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+  const [todayFinance, monthFinance] = await Promise.all([
+    fetchFinancePeriodSummary(supabase, tenantId, todayStart, todayEnd),
+    fetchFinancePeriodSummary(supabase, tenantId, monthStart, monthEnd),
+  ])
 
   const [
     activeSubsRes,
@@ -381,6 +399,8 @@ async function fetchDashboardData(
     activeSubscriptions: activeSubsRes.count ?? 0,
     expiringIn7Days: expiring7Res.count ?? 0,
     todayRevenue,
+    todayExpenses: todayFinance.expenseTotal,
+    monthExpenses: monthFinance.expenseTotal,
     activeDebts: activeDebtsRes.count ?? 0,
     pendingTasks,
     bbAvailable,
@@ -574,11 +594,20 @@ export default function DashboardPage() {
           href="/customers?filter=expiring_soon"
           highlight={kpis.expiringIn7Days > 0 ? 'warning' : undefined}
         />
+        <div className="space-y-1">
+          <KpiCard
+            label="مبيعات اليوم"
+            value={formatMoney(kpis.todayRevenue)}
+            icon={DollarSign}
+            href={ROUTES.reports}
+          />
+          <p className="px-1 text-[11px] text-muted-foreground">إيراد — وليس صافي ربح</p>
+        </div>
         <KpiCard
-          label="مبيعات اليوم"
-          value={formatMoney(kpis.todayRevenue)}
-          icon={DollarSign}
-          href="/reports"
+          label="مصروفات اليوم"
+          value={formatMoney(kpis.todayExpenses)}
+          icon={Receipt}
+          href={ROUTES.expenses}
         />
         <KpiCard
           label="ديون نشطة"

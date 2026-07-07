@@ -29,6 +29,7 @@ export const ROUTES = {
   settings: '/settings',
   credentials: '/credentials',
   bankAccounts: '/bank-accounts',
+  expenses: '/expenses',
   permissions: '/permissions',
   messages: '/messages',
   suspended: '/suspended',
@@ -55,9 +56,11 @@ export const EMPLOYEE_ROUTE_PREFIXES = [
   '/card-sales',
   '/credentials',
   '/bank-accounts',
+  '/expenses',
   '/warehouse',
   '/pending-tasks',
   '/payments',
+  '/permissions',
 ] as const
 
 export type DashboardNavIcon =
@@ -80,6 +83,7 @@ export type DashboardNavIcon =
   | 'SlidersHorizontal'
   | 'Trash2'
   | 'ScrollText'
+  | 'Receipt'
 
 export type DashboardNavItem = {
   href: string
@@ -180,11 +184,32 @@ export const CASHIER_NAV: DashboardNavItem[] = [
     permission: 'manage_bank_accounts',
   },
   {
+    href: ROUTES.expenses,
+    label: 'المصروفات',
+    icon: 'Receipt',
+    available: true,
+    permission: 'manage_expenses',
+  },
+  {
     href: ROUTES.warehouse,
     label: 'المستودع',
     icon: 'Package',
     available: true,
     permission: 'manage_warehouse',
+  },
+  {
+    href: ROUTES.permissions,
+    label: 'الصلاحيات',
+    icon: 'Settings',
+    available: true,
+    permission: 'manage_permissions',
+  },
+  {
+    href: ROUTES.permissions,
+    label: 'الصلاحيات',
+    icon: 'Settings',
+    available: true,
+    permission: 'manage_users',
   },
 ]
 
@@ -215,6 +240,7 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
   { href: ROUTES.networkRouters, label: 'الشبكة', icon: 'Network', available: true },
   // ── مالية ومخزون ──
   { href: ROUTES.bankAccounts, label: 'الحسابات البنكية', icon: 'Landmark', available: true },
+  { href: ROUTES.expenses, label: 'المصروفات', icon: 'Receipt', available: true },
   { href: ROUTES.warehouse, label: 'المستودع', icon: 'Package', available: true },
   // ── تحليل ──
   { href: ROUTES.reports, label: 'التقارير', icon: 'FileText', available: true, adminOnly: true },
@@ -240,7 +266,6 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
     label: 'الصلاحيات',
     icon: 'Settings',
     available: true,
-    adminOnly: true,
   },
 ]
 
@@ -262,6 +287,7 @@ export function isDashboardNavActive(pathname: string, href: string): boolean {
       pathname.startsWith('/card-batches')
     )
   }
+  if (href === ROUTES.expenses) return pathname.startsWith('/expenses')
   return pathname.startsWith(href + '/')
 }
 

@@ -229,6 +229,7 @@ export default function RecycleBinPage() {
                 {groupItems.map((r) => {
                   const left = daysLeft(r.purge_at)
                   const busy = busyId === r.record_id
+                  const noHardDelete = r.table_name === 'expenses'
                   return (
                     <li
                       key={`${r.table_name}-${r.record_id}`}
@@ -267,22 +268,24 @@ export default function RecycleBinPage() {
                         )}
                         استرجاع
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 gap-1 text-xs text-destructive hover:text-destructive"
-                        disabled={busy}
-                        onClick={() =>
-                          setPurgeTarget({
-                            table: r.table_name,
-                            id: r.record_id,
-                            label: r.label,
-                          })
-                        }
-                      >
-                        <Trash2 size={13} />
-                        حذف نهائي
-                      </Button>
+                      {!noHardDelete && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 gap-1 text-xs text-destructive hover:text-destructive"
+                          disabled={busy}
+                          onClick={() =>
+                            setPurgeTarget({
+                              table: r.table_name,
+                              id: r.record_id,
+                              label: r.label,
+                            })
+                          }
+                        >
+                          <Trash2 size={13} />
+                          حذف نهائي
+                        </Button>
+                      )}
                     </li>
                   )
                 })}

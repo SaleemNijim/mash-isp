@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { findExcelFileInFolder, uploadExcelFile } from '@/lib/google-drive/drive-api'
 import { normalizeFileIds } from '@/lib/google-drive/sync'
 import { getMonthlyRenewalsFileName } from '@/lib/excel/monthly-renewals-export'
+import { getMonthlyExpensesFileName, summarizeMonthlyExpenses } from '@/lib/excel/monthly-expenses-export'
 import { getMonthlySalesFileName, summarizeMonthlySales } from '@/lib/excel/monthly-sales-export'
 
 describe('normalizeFileIds', () => {
@@ -32,6 +33,47 @@ describe('getMonthlySalesFileName', () => {
   it('ينتج ملف مبيعات منفصلاً لكل شهر', () => {
     expect(getMonthlySalesFileName('2026-07')).toBe('سجل_المبيعات_07-2026.xlsx')
     expect(getMonthlySalesFileName('2026-12')).toBe('سجل_المبيعات_12-2026.xlsx')
+  })
+})
+
+describe('getMonthlyExpensesFileName', () => {
+  it('ينتج ملف مصروفات منفصلاً لكل شهر', () => {
+    expect(getMonthlyExpensesFileName('2026-07')).toBe('سجل_المصروفات_07-2026.xlsx')
+    expect(getMonthlyExpensesFileName('2026-12')).toBe('سجل_المصروفات_12-2026.xlsx')
+  })
+})
+
+describe('summarizeMonthlyExpenses', () => {
+  it('يفصل النقدي عن الإلكتروني', () => {
+    const summary = summarizeMonthlyExpenses([
+      {
+        paid_at: '2026-07-01T10:00:00Z',
+        category_name: 'رواتب',
+        amount: 100,
+        method_label: 'نقدي',
+        bank_account_label: null,
+        source_account_label: null,
+        description: null,
+        beneficiary: null,
+        notes: null,
+      },
+      {
+        paid_at: '2026-07-02T11:00:00Z',
+        category_name: 'إيجار',
+        amount: 250,
+        method_label: 'Reflect',
+        bank_account_label: 'بنك فلسطين',
+        source_account_label: null,
+        description: null,
+        beneficiary: null,
+        notes: null,
+      },
+    ])
+    expect(summary.cashTotal).toBe(100)
+    expect(summary.bankTotal).toBe(250)
+    expect(summary.grandTotal).toBe(350)
+    expect(summary.cashCount).toBe(1)
+    expect(summary.bankCount).toBe(1)
   })
 })
 

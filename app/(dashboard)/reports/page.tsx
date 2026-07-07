@@ -3,11 +3,12 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
-import { BarChart3, CalendarRange, ShoppingBag } from 'lucide-react'
+import { BarChart3, CalendarRange, Receipt, ShoppingBag, TrendingUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTenant } from '@/hooks/useTenant'
 import { usePermissions } from '@/hooks/usePermissions'
 import { fetchSalesInRange, summarizeSales } from '@/lib/sales/fetch-sales'
+import { fetchFinancePeriodSummary } from '@/lib/finance/summary'
 import {
   dayEndISO,
   formatMonthLabel,
@@ -21,6 +22,48 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { DataPanel } from '@/components/shared/DataPanel'
 import { Button } from '@/components/ui/button'
 import { ROUTES } from '@/lib/navigation'
+
+function FinanceMetricCard({
+  title,
+  amount,
+  count,
+  subtitle,
+  icon: Icon,
+  tone = 'primary',
+}: {
+  title: string
+  amount: number
+  count?: number
+  subtitle: string
+  icon: React.ComponentType<{ size?: number; className?: string }>
+  tone?: 'primary' | 'destructive' | 'muted'
+}) {
+  const amountClass =
+    tone === 'destructive'
+      ? 'text-destructive'
+      : tone === 'muted'
+        ? 'text-foreground'
+        : 'text-primary'
+
+  return (
+    <DataPanel className="p-5 h-full">
+      <div className="flex items-center gap-2 mb-4">
+        <Icon size={18} className={tone === 'destructive' ? 'text-destructive' : 'text-primary'} />
+        <div>
+          <h2 className="font-semibold">{title}</h2>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+      </div>
+
+      <p className={`text-3xl font-bold tabular-nums ${amountClass}`}>
+        {formatAmount(amount)}
+      </p>
+      {count !== undefined && (
+        <p className="text-sm text-muted-foreground mt-1">{count} عملية</p>
+      )}
+    </DataPanel>
+  )
+}
 
 function SummaryCard({
   title,
@@ -95,8 +138,15 @@ export default function ReportsPage() {
     enabled: !!tenant?.id && role === 'admin',
   })
 
+  const { data: monthFinance, isLoading: monthFinanceLoading } = useQuery({
+    queryKey: ['reports-month-finance', tenant?.id, monthStart],
+    queryFn: () => fetchFinancePeriodSummary(supabase, tenant!.id, monthStart, monthEnd),
+    enabled: !!tenant?.id && role === 'admin',
+  })
+
   const todaySummary = useMemo(() => summarizeSales(todaySales), [todaySales])
   const monthSummary = useMemo(() => summarizeSales(monthSales), [monthSales])
+  const monthNetFlow = monthFinance?.netFlow ?? 0
 
   if (role !== 'admin') {
     return (
@@ -119,7 +169,7 @@ export default function ReportsPage() {
         }
       />
 
-      {(todayLoading || monthLoading) && (
+      {(todayLoading || monthLoading || monthFinanceLoading) && (
         <p className="text-sm text-muted-foreground text-center py-6">جارٍ التحميل...</p>
       )}
 
@@ -134,6 +184,21 @@ export default function ReportsPage() {
           summary={monthSummary}
           subtitle={formatMonthLabel()}
         />
+        <FinanceMetricCard
+          title="مصروفات الشهر"
+          amount={monthFinance?.expenseTotal ?? 0}
+          count={monthFinance?.expenseCount}
+          subtitle={formatMonthLabel()}
+          icon={Receipt}
+          tone="destructive"
+        />
+        <FinanceMetricCard
+          title="صافي التدفق الشهري (تقريبي)"
+          amount={monthNetFlow}
+          subtitle={`مبيعات − مصروفات — ${formatMonthLabel()}`}
+          icon={TrendingUp}
+          tone={monthNetFlow >= 0 ? 'primary' : 'destructive'}
+        />
       </div>
 
       <DataPanel className="p-5">
@@ -143,14 +208,26 @@ export default function ReportsPage() {
         </div>
         <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
           <li>الأرقام تشمل: بطاقات التجزئة، مبيعات الموزعين، وتحصيلات PPP (نقد + تطبيق).</li>
+          <li>
+            صافي التدفق = مبيعات − مصروفات مسجّلة — <strong className="font-medium text-foreground">تقريبي</strong> ولا يمثّل صافي ربح محاسبي.
+          </li>
+          <li>لا يشمل: تكلفة شراء البطاقات (COGS)، الديون غير المحصّلة، وديون الموزعين.</li>
           <li>لمعرفة من نفّذ كل عملية عند وجود أكثر من كاشير، راجع سجل العمليات.</li>
           <li>عند انتهاء الشهر يُحدَّث موجز «مبيعات الشهر» تلقائياً للشهر الجاري.</li>
         </ul>
-        <div className="mt-4 flex items-center gap-2 text-sm">
-          <CalendarRange size={16} className="text-muted-foreground" />
-          <Link href={ROUTES.auditLog} className="text-primary font-medium hover:underline">
-            فتح سجل العمليات والتدقيق
-          </Link>
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <span className="flex items-center gap-2">
+            <CalendarRange size={16} className="text-muted-foreground" />
+            <Link href={ROUTES.auditLog} className="text-primary font-medium hover:underline">
+              فتح سجل العمليات والتدقيق
+            </Link>
+          </span>
+          <span className="flex items-center gap-2">
+            <Receipt size={16} className="text-muted-foreground" />
+            <Link href={ROUTES.expenses} className="text-primary font-medium hover:underline">
+              تفاصيل المصروفات
+            </Link>
+          </span>
         </div>
       </DataPanel>
     </div>

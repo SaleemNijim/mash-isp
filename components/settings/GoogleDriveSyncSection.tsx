@@ -114,6 +114,7 @@ export function GoogleDriveSyncSection() {
             <h2 className="font-semibold text-lg">مزامنة Google Drive</h2>
             <p className="text-xs text-muted-foreground mt-1">
               كل شركة تربط إيميل Google الخاص بها. الملفات تُرفع إلى Drive حساب الشركة، وليس حساب MASH.
+              تشمل: الموزعون، الراوترات، سجل المبيعات، سجلات التجديد، وسجل المصروفات.
             </p>
           </div>
         </div>

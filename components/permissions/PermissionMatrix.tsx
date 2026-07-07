@@ -17,18 +17,27 @@ import {
 } from '@/lib/permissions'
 
 function mapPermissionRpcError(message: string): string {
-  if (message.includes('not_authorized')) return 'غير مصرّح — فقط مدير الشركة'
+  if (message.includes('not_authorized')) {
+    return 'غير مصرّح — المدير فقط يمنح صلاحيات الإدارة والحذف'
+  }
   if (message.includes('employee_not_found')) return 'الموظف غير موجود أو ليس كاشيراً'
-  if (message.includes('unknown_permission')) return 'صلاحية غير معروفة'
+  if (message.includes('unknown_permission')) return 'صلاحية غير معروفة — طبّق migrations قاعدة البيانات'
   if (message.includes('no_tenant_context')) return 'تعذّر تحديد الشركة'
   return message
 }
+
+const ADMIN_TIER_PERMISSIONS = new Set<PermissionCode>([
+  'manage_users',
+  'manage_permissions',
+  'delete_records',
+])
 
 export function PermissionMatrix() {
   const role = usePermissions((s) => s.role)
   const hasPermission = usePermissions((s) => s.hasPermission)
   const canEditMatrix =
     role === 'admin' || role === 'super_admin' || hasPermission('manage_permissions')
+  const isAdmin = role === 'admin' || role === 'super_admin'
 
   const { data: users = [], isLoading: loadingUsers } = useTenantUsers()
   const employees = useMemo(
@@ -113,7 +122,13 @@ export function PermissionMatrix() {
     <div className="space-y-6" dir="rtl">
       {!canEditMatrix && (
         <p className="text-sm text-mash-warning-text bg-mash-warning-bg border border-mash-warning-bg rounded-lg px-4 py-2">
-          يمكنك عرض الصلاحيات فقط — لتعديلها تحتاج صلاحية «تعديل صلاحيات الآخرين».
+          يمكنك عرض الصلاحيات فقط — لتعديلها تحتاج صلاحية «تعديل صلاحيات الآخرين» أو حساب مدير.
+        </p>
+      )}
+
+      {!isAdmin && canEditMatrix && (
+        <p className="text-sm text-muted-foreground bg-muted/40 border border-border rounded-lg px-4 py-2">
+          يمكنك تعديل صلاحيات التشغيل والمالية فقط. صلاحيات الإدارة والحذف يمنحها مدير الشركة.
         </p>
       )}
 
@@ -153,6 +168,7 @@ export function PermissionMatrix() {
                     const key = `${user.id}:${perm}`
                     const checked = userPerms[user.id]?.has(perm) ?? false
                     const busy = toggling === key
+                    const adminTierLocked = !isAdmin && ADMIN_TIER_PERMISSIONS.has(perm)
 
                     return (
                       <td key={perm} className="px-2 py-3 text-center">
@@ -161,14 +177,15 @@ export function PermissionMatrix() {
                           role="switch"
                           aria-checked={checked}
                           aria-label={`${PERMISSION_LABELS[perm]} — ${user.name}`}
+                          title={adminTierLocked ? 'مدير الشركة فقط' : undefined}
                           onClick={() => void toggle(user.id, perm)}
-                          disabled={busy || !canEditMatrix}
+                          disabled={busy || !canEditMatrix || adminTierLocked}
                           className={[
                             'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent',
                             'transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2',
                             'focus-visible:ring-ring focus-visible:ring-offset-2',
                             checked ? 'bg-primary' : 'bg-input',
-                            busy ? 'opacity-50 cursor-wait' : canEditMatrix ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed',
+                            busy ? 'opacity-50 cursor-wait' : canEditMatrix && !adminTierLocked ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed',
                           ].join(' ')}
                         >
                           <span

@@ -4,14 +4,17 @@ import { useMemo } from 'react'
 import { X } from 'lucide-react'
 import type { LedgerEntry } from '@/lib/payments/account-ledger'
 import {
+  LEDGER_DIRECTION_LABELS,
   LEDGER_KIND_LABELS,
   LEDGER_METHOD_LABELS,
   ledgerEntriesForAccount,
+  ledgerSignedAmount,
 } from '@/lib/payments/ledger-labels'
 import { formatMoney } from '@/lib/format-money'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataPanel } from '@/components/shared/DataPanel'
+import { cn } from '@/lib/utils'
 
 interface BankAccountSummary {
   id: string
@@ -47,8 +50,12 @@ export function BankAccountLedgerPanel({
     [account.id, ledger],
   )
 
-  const total = useMemo(
-    () => entries.reduce((s, e) => s + Number(e.amount), 0),
+  const netLedger = useMemo(
+    () =>
+      entries.reduce(
+        (s, e) => s + ledgerSignedAmount(Number(e.amount), e.direction),
+        0,
+      ),
     [entries],
   )
 
@@ -56,7 +63,7 @@ export function BankAccountLedgerPanel({
     <DataPanel noPadding className="border-primary/20">
       <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-border bg-muted/30">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold">تحويلات — {account.bank_name}</h2>
+          <h2 className="text-sm font-semibold">حركة الحساب — {account.bank_name}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {account.account_name ?? '—'}
             {account.account_number ? (
@@ -68,7 +75,11 @@ export function BankAccountLedgerPanel({
               </>
             ) : null}
             {' · '}
-            إجمالي: <span className="font-medium tabular-nums">{formatMoney(total)}</span>
+            صافي الدفتر:{' '}
+            <span className="font-medium tabular-nums">{formatMoney(netLedger)}</span>
+            {' · '}
+            الرصيد المسجّل:{' '}
+            <span className="font-medium tabular-nums">{formatMoney(account.current_total)}</span>
           </p>
         </div>
         <Button
@@ -85,7 +96,7 @@ export function BankAccountLedgerPanel({
 
       {entries.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
-          لا تحويلات مسجّلة على هذا الحساب بعد
+          لا حركات مسجّلة على هذا الحساب بعد
         </p>
       ) : (
         <div className="overflow-x-auto max-h-56 overflow-y-auto">
@@ -93,7 +104,8 @@ export function BankAccountLedgerPanel({
             <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur border-b border-border">
               <tr>
                 <th className="px-3 py-2 text-right font-semibold text-xs">التاريخ</th>
-                <th className="px-3 py-2 text-right font-semibold text-xs">من</th>
+                <th className="px-3 py-2 text-right font-semibold text-xs">الطرف</th>
+                <th className="px-3 py-2 text-right font-semibold text-xs">الاتجاه</th>
                 <th className="px-3 py-2 text-right font-semibold text-xs">الحساب الصادر</th>
                 <th className="px-3 py-2 text-right font-semibold text-xs">الطريقة</th>
                 <th className="px-3 py-2 text-right font-semibold text-xs">المبلغ</th>
@@ -102,33 +114,50 @@ export function BankAccountLedgerPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {entries.map((entry) => (
-                <tr key={`${entry.kind}-${entry.id}`} className="hover:bg-muted/20">
-                  <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
-                    {formatDate(entry.recorded_at)}
-                  </td>
-                  <td className="px-3 py-2 text-xs font-medium">{entry.counterparty}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
-                    {entry.source_account_label?.trim() || '—'}
-                  </td>
-                  <td className="px-3 py-2">
-                    <Badge variant="secondary" className="text-[10px] font-normal px-1.5 py-0">
-                      {LEDGER_METHOD_LABELS[entry.method] ?? entry.method}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-2 tabular-nums text-xs font-semibold">
-                    {formatMoney(entry.amount)}
-                  </td>
-                  <td className="px-3 py-2">
-                    <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">
-                      {LEDGER_KIND_LABELS[entry.kind] ?? entry.kind}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground max-w-[120px]">
-                    <span className="line-clamp-2">{entry.notes?.trim() || '—'}</span>
-                  </td>
-                </tr>
-              ))}
+              {entries.map((entry) => {
+                const signed = ledgerSignedAmount(Number(entry.amount), entry.direction)
+                return (
+                  <tr key={`${entry.kind}-${entry.id}`} className="hover:bg-muted/20">
+                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                      {formatDate(entry.recorded_at)}
+                    </td>
+                    <td className="px-3 py-2 text-xs font-medium">{entry.counterparty}</td>
+                    <td className="px-3 py-2">
+                      <Badge
+                        variant={entry.direction === 'out' ? 'destructive' : 'secondary'}
+                        className="text-[10px] font-normal px-1.5 py-0"
+                      >
+                        {LEDGER_DIRECTION_LABELS[entry.direction] ?? entry.direction}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {entry.source_account_label?.trim() || '—'}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Badge variant="secondary" className="text-[10px] font-normal px-1.5 py-0">
+                        {LEDGER_METHOD_LABELS[entry.method] ?? entry.method}
+                      </Badge>
+                    </td>
+                    <td
+                      className={cn(
+                        'px-3 py-2 tabular-nums text-xs font-semibold',
+                        entry.direction === 'out' ? 'text-destructive' : '',
+                      )}
+                    >
+                      {signed < 0 ? '−' : ''}
+                      {formatMoney(Math.abs(signed))}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">
+                        {LEDGER_KIND_LABELS[entry.kind] ?? entry.kind}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground max-w-[120px]">
+                      <span className="line-clamp-2">{entry.notes?.trim() || '—'}</span>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

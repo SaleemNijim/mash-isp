@@ -18,6 +18,7 @@ export const PERMISSION_CODES = [
   'manage_network',
   'manage_warehouse',
   'manage_bank_accounts',
+  'manage_expenses',
   // مهام وتقارير
   'view_pending_tasks',
   'confirm_payments',
@@ -44,6 +45,7 @@ export const PERMISSION_LABELS: Record<PermissionCode, string> = {
   manage_network: 'إدارة الشبكة',
   manage_warehouse: 'إدارة المستودع',
   manage_bank_accounts: 'إدارة الحسابات البنكية',
+  manage_expenses: 'إدارة المصروفات',
   view_pending_tasks: 'عرض المهام المعلقة',
   confirm_payments: 'تأكيد المدفوعات',
   view_reports: 'عرض التقارير',
@@ -80,8 +82,8 @@ export const PERMISSION_GROUPS: {
   },
   {
     id: 'ops',
-    label: 'الشبكة والمستودع والحسابات',
-    codes: ['manage_network', 'manage_warehouse', 'manage_bank_accounts'],
+    label: 'الشبكة والمستودع والمالية',
+    codes: ['manage_network', 'manage_warehouse', 'manage_bank_accounts', 'manage_expenses'],
   },
   {
     id: 'tasks',
@@ -119,9 +121,11 @@ export const ROUTE_REQUIRED_PERMISSIONS: Record<string, PermissionCode[]> = {
   '/network': ['manage_network'],
   '/credentials': ['manage_ppp'],
   '/bank-accounts': ['manage_bank_accounts'],
+  '/expenses': ['manage_expenses'],
   '/warehouse': ['manage_warehouse'],
   '/pending-tasks': ['view_pending_tasks', 'confirm_payments'],
   '/payments': ['confirm_payments', 'view_pending_tasks'],
+  '/permissions': ['manage_users', 'manage_permissions'],
 }
 
 export function hasAnyPermission(
